@@ -1,0 +1,43 @@
+# Environment and secrets
+.env
+*.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# Data (generated at runtime)
+kitchen_agent/storage/kitchen.db
+kitchen_agent/storage/kitchen.db-journal
+kitchen_agent/storage/chroma/
+kitchen_agent/storage/chroma_data/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (for legacy bot.js)
+node_modules/
+package-lock.json

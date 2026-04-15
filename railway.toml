@@ -1,0 +1,28 @@
+[railway]
+schema = "v2"
+
+[[services]]
+name = "kitchen-agent"
+path = "."
+builder = "python"
+pythonVersion = "3.11"
+startCommand = "uvicorn bot:app --host 0.0.0.0 --port $PORT"
+[services.variables]
+PORT = "8000"
+USE_WEBHOOK = "true"
+DB_PATH = "kitchen_agent/storage/kitchen.db"
+CHROMA_PATH = "kitchen_agent/storage/chroma"
+AGENT_BASE_URL = "${KITCHEN_AGENT_URL}"
+REMINDER_DAEMON_URL = "http://reminder-daemon:8001"
+
+[[services]]
+name = "reminder-daemon"
+path = "."
+builder = "python"
+pythonVersion = "3.11"
+startCommand = "uvicorn scheduler.reminder_daemon:app --host 0.0.0.0 --port $PORT"
+[services.variables]
+PORT = "8001"
+
+[nixpacks]
+# Railway uses nixpacks for Python by default
