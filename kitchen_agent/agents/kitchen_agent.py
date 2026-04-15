@@ -4,16 +4,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import create_react_agent
-from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import MemorySaver
 
-from kitchen_agent.agents.state import AgentState
 from kitchen_agent.tools import TOOLS
 from kitchen_agent.storage.memory import get_working_memory, append_interaction
-from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL, GEMINI_API_URL
+from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL
 
 
 def _build_system_prompt(chat_id: str) -> str:
@@ -26,6 +23,8 @@ def _build_system_prompt(chat_id: str) -> str:
     except Exception:
         pass
     
+    learned_context = f"### Learned Context:\n{interaction_summary}" if interaction_summary else ""
+
     prompt = f"""You are Karl — a friendly, practical kitchen manager and cooking assistant.
 
 ## YOUR CAPABILITIES
@@ -53,7 +52,7 @@ def _build_system_prompt(chat_id: str) -> str:
 ### Upcoming Reminders:
 {memory['upcoming_reminders']}
 
-{"### Learned Context:\n" + interaction_summary if interaction_summary else ""}
+{learned_context}
 
 ## TOOL USAGE GUIDELINES
 - Call check_inventory() to see what the user has (always do this for recipe suggestions)
