@@ -3,19 +3,16 @@ import os
 import sys
 import logging
 from datetime import datetime
-from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
 
-from kitchen_agent.messaging.telegram_client import send_message
-from kitchen_agent.config.settings import TELEGRAM_TOKEN
+from kitchen_agent.messaging.messenger_client import send_user_message
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,7 +33,7 @@ def reminder_job(reminder_id: int, chat_id: str, title: str, message: str):
     """The job that fires when a reminder is due."""
     try:
         full_msg = f"🔔 *{title}*\n\n{message}"
-        send_message(chat_id, full_msg)
+        send_user_message(chat_id=chat_id, text=full_msg, parse_mode="Markdown")
         logger.info(f"Reminder {reminder_id} fired for chat {chat_id}")
         
         from kitchen_agent.storage.database import ReminderDB

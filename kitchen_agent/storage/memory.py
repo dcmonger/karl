@@ -1,7 +1,5 @@
 """Long-term memory management — combines SQLite summaries + ChromaDB semantic store."""
-import json
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime
 from database import MemoryDB, InventoryDB, ShoppingListDB, ReminderDB
 from storage.vector_store import PreferenceStore, RecipeHistoryStore
 
@@ -123,7 +121,6 @@ def update_preferences_summary(chat_id: str = "default"):
     prefs = _pref_store.get_preferences(chat_id)
     liked = [p for p in prefs if p.get("value") in ("liked", "love", "enjoy")]
     disliked = [p for p in prefs if p.get("value") in ("disliked", "hate", "avoid")]
-    neutral = [p for p in prefs if p not in liked and p not in disliked]
     summary = {
         "liked_entities": [p.get("entity") for p in liked],
         "disliked_entities": [p.get("entity") for p in disliked],

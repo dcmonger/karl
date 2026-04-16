@@ -9,7 +9,7 @@ Karl is a FastAPI-based kitchen assistant that can:
 
 ## Project structure
 
-- `kitchen_agent/bot.py` — main FastAPI app + Telegram update handling.
+- `kitchen_agent/messenger.py` — messenger service for Telegram transport + chat endpoint handling.
 - `kitchen_agent/api/routes.py` — API routes for chat, inventory, shopping, and memory maintenance.
 - `kitchen_agent/scheduler/reminder_daemon.py` — reminder daemon service.
 - `kitchen_agent/storage/` — database, memory, and vector store helpers.
@@ -52,6 +52,7 @@ DB_PATH=kitchen_agent/storage/kitchen.db
 CHROMA_PATH=kitchen_agent/storage/chroma
 REMINDER_DAEMON_URL=http://localhost:8001
 AGENT_BASE_URL=http://localhost:8000
+AUTHORIZED_TELEGRAM_USER_IDS=123456789,987654321
 USE_WEBHOOK=false
 PORT=8000
 REMINDER_PORT=8001
@@ -81,7 +82,7 @@ python -m uvicorn kitchen_agent.scheduler.reminder_daemon:app --host 0.0.0.0 --p
 In another terminal, start kitchen agent:
 
 ```bash
-python -m uvicorn kitchen_agent.bot:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn kitchen_agent.messenger:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Docker setup
@@ -97,6 +98,18 @@ Services:
 - `kitchen-agent` on port `8000`
 - `reminder-daemon` on port `8001`
 - Optional `chroma` container exposed as `8002`
+
+### Reminder delivery path
+
+- The reminder daemon does **not** call Telegram directly.
+- It POSTs reminder messages to `POST /internal/send-message` on the messenger service.
+- The messenger service is the single place that sends outbound Telegram messages.
+
+### Telegram allowlist (optional)
+
+- Set `AUTHORIZED_TELEGRAM_USER_IDS` to a comma-separated list of Telegram user IDs.
+- If set, only those users can interact with the messenger.
+- Other users receive: `You're not an authorized user.`
 
 ## API quickstart
 

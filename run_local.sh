@@ -26,7 +26,7 @@ DAEMON_PID=$!
 
 sleep 2
 
-echo "Starting kitchen agent on port 8000..."
-python -m uvicorn kitchen_agent.bot:app --host 0.0.0.0 --port 8000 --reload
+echo "Starting messenger service on port 8000..."
+python -m uvicorn kitchen_agent.messenger:app --host 0.0.0.0 --port 8000 --reload
 
 kill $DAEMON_PID 2>/dev/null || true
