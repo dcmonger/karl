@@ -1,7 +1,7 @@
 """SQLite database schema for structured data."""
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Optional
 import json
 
 DB_PATH = "kitchen_agent/storage/kitchen.db"

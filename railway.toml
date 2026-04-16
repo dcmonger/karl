@@ -6,7 +6,7 @@ name = "kitchen-agent"
 path = "."
 builder = "python"
 pythonVersion = "3.11"
-startCommand = "uvicorn bot:app --host 0.0.0.0 --port $PORT"
+startCommand = "uvicorn messenger:app --host 0.0.0.0 --port $PORT"
 [services.variables]
 PORT = "8000"
 USE_WEBHOOK = "true"

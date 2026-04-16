@@ -1,6 +1,5 @@
 """ChromaDB for unstructured data - preferences, recipes, feedback."""
 import chromadb
-from chromadb.config import Settings
 from typing import Optional
 import json
 import os

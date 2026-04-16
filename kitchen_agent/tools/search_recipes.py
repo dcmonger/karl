@@ -1,11 +1,10 @@
 """search_recipes tool — generates recipe suggestions using Gemini with current inventory."""
 import requests
 from langchain_core.tools import tool
-from kitchen_agent.storage.database import InventoryDB, ReminderDB
+from kitchen_agent.storage.database import InventoryDB
 from kitchen_agent.storage.vector_store import PreferenceStore, RecipeHistoryStore
 from kitchen_agent.storage.memory import get_working_memory
 from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL, GEMINI_API_URL
-from datetime import datetime, timedelta
 
 _inventory_db = InventoryDB()
 _pref_store = PreferenceStore()
@@ -60,8 +59,6 @@ def search_recipes(
     """
     memory = get_working_memory(chat_id)
     prefs = _pref_store.search_preferences(chat_id, query or "food preferences", limit=5)
-    recent_recipes = _recipe_store.get_recent_recipes(chat_id, limit=5) if hasattr(__import__('kitchen_agent.storage.vector_store', fromlist=['RecipeHistoryStore']), 'RecipeHistoryStore') else []
-    
     pref_lines = "\n".join([
         f"- {p.get('entity')}: {p.get('value')} ({p.get('type')})"
         for p in prefs
