@@ -1,5 +1,3 @@
-"""Messaging abstractions for calling the messenger process."""
+"""Messaging package reserved for future transport helpers."""
 
-from kitchen_agent.messaging.messenger_client import send_user_message
-
-__all__ = ["send_user_message"]
+__all__: list[str] = []

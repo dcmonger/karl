@@ -7,7 +7,6 @@ from datetime import datetime
 
 _reminder_db = ReminderDB()
 
-
 @tool
 def schedule_reminder(
     title: str,

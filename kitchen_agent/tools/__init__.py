@@ -5,6 +5,8 @@ from kitchen_agent.tools.add_to_shopping_list import add_to_shopping_list
 from kitchen_agent.tools.log_preference import log_preference, log_recipe_feedback
 from kitchen_agent.tools.search_recipes import search_recipes
 from kitchen_agent.tools.schedule_reminder import schedule_reminder
+from kitchen_agent.tools.update_inventory import update_inventory
+from kitchen_agent.tools.consume_inventory import consume_inventory
 
 TOOLS = [
     check_inventory,
@@ -14,6 +16,8 @@ TOOLS = [
     log_recipe_feedback,
     search_recipes,
     schedule_reminder,
+    update_inventory,
+    consume_inventory,
 ]
 
 TOOL_MAP = {t.name: t for t in TOOLS}

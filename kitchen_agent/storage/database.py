@@ -1,10 +1,11 @@
 """SQLite database schema for structured data."""
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional
 import json
 
-DB_PATH = "kitchen_agent/storage/kitchen.db"
+DB_PATH = os.getenv("DB_PATH", "kitchen_agent/storage/kitchen.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)

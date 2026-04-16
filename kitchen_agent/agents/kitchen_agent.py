@@ -4,12 +4,16 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
 
 from kitchen_agent.tools import TOOLS
-from kitchen_agent.storage.memory import get_working_memory, append_interaction
+from kitchen_agent.storage.memory import (
+    get_working_memory,
+    append_interaction,
+    append_conversation_message,
+    get_conversation_history,
+)
 from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL
 
 
@@ -61,9 +65,8 @@ def _build_system_prompt(chat_id: str) -> str:
 - Call add_to_shopping_list() when recommending items to buy
 - Call log_preference() or log_recipe_feedback() when the user shares feedback
 - Call schedule_reminder() when a recipe needs advance prep (marinating, thawing, proofing)
-- When the user says they used up an ingredient, update the inventory via implicit knowledge
-  (you can call get_item_quantity() first, then explain what to do — but inventory updates
-  happen when the user tells you explicitly)
+- Call update_inventory() when the user says they bought/restocked something
+- Call consume_inventory() when the user says they used up or consumed inventory
 
 ## IMPORTANT RULES
 - Always respect the user's dietary preferences and restrictions
@@ -101,22 +104,27 @@ class KitchenAgent:
             model=self.llm,
             tools=agent_tools,
             state_modifier=_build_system_prompt(chat_id),
-            checkpointer=MemorySaver(),
         )
     
     def run(self, user_message: str, chat_id: str = None) -> str:
         cid = chat_id or self.chat_id
         append_interaction(cid, "user", user_message)
         
-        config = {"configurable": {"thread_id": cid}}
-        
+        prior_messages = []
+        for msg in get_conversation_history(cid, limit=8, max_total_chars=3000):
+            if msg.get("role") == "user":
+                prior_messages.append(HumanMessage(content=msg.get("content", "")))
+            elif msg.get("role") == "assistant":
+                prior_messages.append(AIMessage(content=msg.get("content", "")))
+
         result = self.graph.invoke(
-            {"messages": [HumanMessage(content=user_message)]},
-            config=config,
+            {"messages": [*prior_messages, HumanMessage(content=user_message)]},
         )
         
         last_msg = result["messages"][-1]
         response = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
         
         append_interaction(cid, "assistant", response)
+        append_conversation_message(cid, "user", user_message)
+        append_conversation_message(cid, "assistant", response)
         return response

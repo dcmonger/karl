@@ -11,8 +11,8 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
+import requests
 
-from kitchen_agent.messaging.messenger_client import send_user_message
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,6 +27,23 @@ scheduler = BackgroundScheduler(
 )
 
 JOBS: dict[int, str] = {}
+
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_API_BASE = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}" if TELEGRAM_TOKEN else ""
+
+
+def send_user_message(chat_id: str, text: str, parse_mode: str = "Markdown") -> dict:
+    """Send a message directly to Telegram from the reminder daemon."""
+    if not TELEGRAM_API_BASE:
+        raise RuntimeError("TELEGRAM_TOKEN not configured for reminder daemon")
+    response = requests.post(
+        f"{TELEGRAM_API_BASE}/sendMessage",
+        json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def reminder_job(reminder_id: int, chat_id: str, title: str, message: str):

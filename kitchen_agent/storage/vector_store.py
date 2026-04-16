@@ -4,7 +4,7 @@ from typing import Optional
 import json
 import os
 
-CHROMA_PATH = "kitchen_agent/storage/chroma"
+CHROMA_PATH = os.getenv("CHROMA_PATH", "kitchen_agent/storage/chroma")
 
 def init_vector_store():
     os.makedirs(CHROMA_PATH, exist_ok=True)
