@@ -169,10 +169,8 @@ def summarize_recent_interactions(chat_id: str = "default") -> str:
         existing["summarized_at"] = datetime.now().isoformat()
         _memory_db.set("interaction_summary", existing)
 
-    interactions.clear()
-    if len(interactions) > MAX_RECENT_INTERACTIONS:
-        interactions = interactions[-MAX_RECENT_INTERACTIONS:]
-    _memory_db.set(_interaction_key(chat_id), {"interactions": interactions})
+    trimmed = interactions[-MAX_RECENT_INTERACTIONS:] if len(interactions) > MAX_RECENT_INTERACTIONS else interactions
+    _memory_db.set(_interaction_key(chat_id), {"interactions": trimmed})
     _memory_db.set(LAST_SUMMARY_TIME_KEY, {"time": datetime.now().isoformat()})
 
     return summary

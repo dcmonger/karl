@@ -1,35 +1,21 @@
 """search_recipes tool — generates recipe suggestions using Gemini with current inventory."""
-import requests
 from langchain_core.tools import tool
 from kitchen_agent.storage.database import InventoryDB
 from kitchen_agent.storage.vector_store import PreferenceStore, RecipeHistoryStore
 from kitchen_agent.storage.memory import get_working_memory
-from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL, GEMINI_API_URL
+from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL
 
 _inventory_db = InventoryDB()
 _pref_store = PreferenceStore()
 _recipe_store = RecipeHistoryStore()
 
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-def _call_gemini(prompt: str, system_instruction: str = None) -> str:
-    url = (
-        f"{GEMINI_API_URL}/{GEMINI_MODEL}:generateContent"
-        f"?key={GEMINI_KEY}"
-    )
-    parts = [{"text": prompt}]
-    if system_instruction:
-        parts.insert(0, {"text": system_instruction})
-    
-    payload = {"contents": [{"parts": parts}]}
-    if system_instruction:
-        payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-        payload["contents"][0]["parts"] = [{"text": prompt}]
-    
-    response = requests.post(url, json=payload, timeout=60)
-    response.raise_for_status()
-    data = response.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"]
-
+_llm = ChatGoogleGenerativeAI(
+    model=GEMINI_MODEL,
+    google_api_key=GEMINI_KEY,
+    temperature=0.8,
+)
 
 SYSTEM_INSTRUCTION = """You are a friendly, practical kitchen assistant. You help users figure out what to cook with what they have, suggest new dishes, and inspire them to eat well. Be concise, enthusiastic, and practical. When suggesting recipes, include rough prep time, cook time, and key ingredients. If inventory is limited, suggest simple flexible recipes. If you recommend a recipe that needs marinating or advance prep, mention it. You know the user's preferences and inventory — respect their likes, dislikes, and dietary needs. Never suggest a recipe that uses ingredients they dislike or are allergic to. Keep responses conversational but informative."""
 
@@ -94,7 +80,7 @@ Also note any items that are running low or expiring soon that should be used.
 Keep it conversational and encouraging. Max {limit} suggestions."""
     
     try:
-        result = _call_gemini(prompt, system_instruction=SYSTEM_INSTRUCTION)
-        return result
+        result = _llm.invoke(prompt)
+        return result.content if hasattr(result, 'content') else str(result)
     except Exception as e:
         return f"Sorry, I had trouble generating recipes right now: {e}"
