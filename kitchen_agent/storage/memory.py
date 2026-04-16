@@ -1,7 +1,7 @@
 """Long-term memory management — combines SQLite summaries + ChromaDB semantic store."""
 from datetime import datetime
-from database import MemoryDB, InventoryDB, ShoppingListDB, ReminderDB
-from storage.vector_store import PreferenceStore, RecipeHistoryStore
+from kitchen_agent.storage.database import MemoryDB, InventoryDB, ShoppingListDB, ReminderDB
+from kitchen_agent.storage.vector_store import PreferenceStore, RecipeHistoryStore
 
 _memory_db = MemoryDB()
 _inventory_db = InventoryDB()
@@ -18,6 +18,16 @@ RECENT_INTERACTIONS_KEY = "recent_interactions"
 LAST_SUMMARY_TIME_KEY = "last_summary_time"
 
 MAX_RECENT_INTERACTIONS = 50
+
+
+def _interaction_key(chat_id: str | None) -> str:
+    cid = chat_id or "default"
+    return f"{RECENT_INTERACTIONS_KEY}:{cid}"
+
+
+def _conversation_key(chat_id: str | None) -> str:
+    cid = chat_id or "default"
+    return f"conversation_history:{cid}"
 
 
 def get_working_memory(chat_id: str = None) -> dict:
@@ -62,7 +72,7 @@ def get_working_memory(chat_id: str = None) -> dict:
         for r in upcoming_reminders
     ]
 
-    recent_interactions_raw = _memory_db.get(RECENT_INTERACTIONS_KEY) or {"interactions": []}
+    recent_interactions_raw = _memory_db.get(_interaction_key(chat_id)) or {"interactions": []}
     recent_interactions = recent_interactions_raw.get("interactions", [])[-10:]
 
     return {
@@ -79,7 +89,7 @@ def get_working_memory(chat_id: str = None) -> dict:
 
 def append_interaction(chat_id: str, role: str, content: str):
     """Append a turn to the rolling recent interactions log."""
-    raw = _memory_db.get(RECENT_INTERACTIONS_KEY) or {"interactions": []}
+    raw = _memory_db.get(_interaction_key(chat_id)) or {"interactions": []}
     interactions = raw["interactions"]
     interactions.append({
         "role": role,
@@ -88,7 +98,7 @@ def append_interaction(chat_id: str, role: str, content: str):
     })
     if len(interactions) > MAX_RECENT_INTERACTIONS:
         interactions = interactions[-MAX_RECENT_INTERACTIONS:]
-    _memory_db.set(RECENT_INTERACTIONS_KEY, {"interactions": interactions})
+    _memory_db.set(_interaction_key(chat_id), {"interactions": interactions})
 
 
 def update_inventory_snapshot():
@@ -132,7 +142,7 @@ def update_preferences_summary(chat_id: str = "default"):
 
 def summarize_recent_interactions(chat_id: str = "default") -> str:
     """Compress recent interactions into a summary string for long-term memory."""
-    raw = _memory_db.get(RECENT_INTERACTIONS_KEY)
+    raw = _memory_db.get(_interaction_key(chat_id))
     if not raw or not raw.get("interactions"):
         return ""
     interactions = raw["interactions"]
@@ -162,11 +172,51 @@ def summarize_recent_interactions(chat_id: str = "default") -> str:
     interactions.clear()
     if len(interactions) > MAX_RECENT_INTERACTIONS:
         interactions = interactions[-MAX_RECENT_INTERACTIONS:]
-    _memory_db.set(RECENT_INTERACTIONS_KEY, {"interactions": interactions})
+    _memory_db.set(_interaction_key(chat_id), {"interactions": interactions})
     _memory_db.set(LAST_SUMMARY_TIME_KEY, {"time": datetime.now().isoformat()})
 
     return summary
 
+
+
+def append_conversation_message(chat_id: str, role: str, content: str):
+    """Persist full conversation history per chat for restart-safe context."""
+    key = _conversation_key(chat_id)
+    raw = _memory_db.get(key) or {"messages": []}
+    messages = raw.get("messages", [])
+    messages.append({
+        "role": role,
+        "content": content,
+        "timestamp": datetime.now().isoformat(),
+    })
+    if len(messages) > 200:
+        messages = messages[-200:]
+    _memory_db.set(key, {"messages": messages})
+
+
+def get_conversation_history(
+    chat_id: str,
+    limit: int = 8,
+    max_total_chars: int = 3000,
+) -> list[dict]:
+    """Load a bounded slice of persisted conversation history for a chat."""
+    raw = _memory_db.get(_conversation_key(chat_id)) or {"messages": []}
+    messages = raw.get("messages", [])[-limit:]
+
+    bounded: list[dict] = []
+    total_chars = 0
+    for msg in reversed(messages):
+        content = (msg.get("content") or "")[:600]
+        msg_len = len(content)
+        if total_chars + msg_len > max_total_chars:
+            break
+        bounded.append({
+            "role": msg.get("role"),
+            "content": content,
+        })
+        total_chars += msg_len
+
+    return list(reversed(bounded))
 
 def run_memory_maintenance(chat_id: str = "default"):
     """Periodic maintenance job — refreshes snapshots and summarizes interactions."""
