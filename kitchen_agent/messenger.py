@@ -1,13 +1,12 @@
 """Messenger process — runs FastAPI + Telegram transport (polling or webhook mode)."""
 import os
 import sys
-import threading
 import logging
 from contextlib import asynccontextmanager
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-import requests
+import httpx
 from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
 import uvicorn
@@ -31,44 +30,57 @@ AUTHORIZED_TELEGRAM_USER_IDS = {
 _agents: dict[str, KitchenAgent] = {}
 _offset = 0
 
+_telegram_client: httpx.AsyncClient | None = None
 
-def send_telegram_message(chat_id: str, text: str, parse_mode: str = "Markdown") -> dict:
+
+def _get_client() -> httpx.AsyncClient:
+    global _telegram_client
+    if _telegram_client is None:
+        _telegram_client = httpx.AsyncClient(timeout=30.0)
+    return _telegram_client
+
+
+async def send_telegram_message(chat_id: str, text: str, parse_mode: str = "Markdown") -> dict:
     """Send a text message to a Telegram user."""
+    client = _get_client()
     url = f"{BASE_URL}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
         "parse_mode": parse_mode,
     }
-    response = requests.post(url, json=payload, timeout=30)
+    response = await client.post(url, json=payload)
     response.raise_for_status()
     return response.json()
 
 
-def get_updates(offset: int = None, timeout: int = 60) -> dict:
+async def get_updates(offset: int = None, timeout: int = 60) -> dict:
     """Get new updates (long polling)."""
+    client = _get_client()
     url = f"{BASE_URL}/getUpdates"
     params = {"timeout": timeout}
     if offset:
         params["offset"] = offset
-    response = requests.get(url, params=params, timeout=timeout + 10)
+    response = await client.get(url, params=params, timeout=timeout + 10)
     response.raise_for_status()
     return response.json()
 
 
-def set_webhook(url: str) -> dict:
+async def set_webhook(url: str) -> dict:
     """Set the webhook URL for incoming updates."""
+    client = _get_client()
     telegram_url = f"{BASE_URL}/setWebhook"
     payload = {"url": url}
-    response = requests.post(telegram_url, json=payload, timeout=10)
+    response = await client.post(telegram_url, json=payload)
     response.raise_for_status()
     return response.json()
 
 
-def delete_webhook() -> dict:
+async def delete_webhook() -> dict:
     """Remove the webhook."""
+    client = _get_client()
     telegram_url = f"{BASE_URL}/deleteWebhook"
-    response = requests.post(telegram_url, timeout=10)
+    response = await client.post(telegram_url)
     response.raise_for_status()
     return response.json()
 
@@ -86,7 +98,7 @@ def is_authorized_user(user_id: str) -> bool:
     return user_id in AUTHORIZED_TELEGRAM_USER_IDS
 
 
-def process_update(update: dict):
+async def process_update(update: dict):
     """Process a single Telegram update."""
     global _offset
     
@@ -106,39 +118,39 @@ def process_update(update: dict):
 
     if not is_authorized_user(sender_id):
         logger.warning(f"Unauthorized message blocked from sender_id={sender_id}, chat_id={chat_id}")
-        send_telegram_message(chat_id, "You're not an authorized user.")
+        await send_telegram_message(chat_id, "You're not an authorized user.")
         return
     
     logger.info(f"Message from {chat_id}: {text[:80]}")
     
     try:
         agent = get_agent(chat_id)
-        response = agent.run(text, chat_id=chat_id)
-        send_telegram_message(chat_id, response)
+        response = await agent.run_async(text, chat_id=chat_id)
+        await send_telegram_message(chat_id, response)
         logger.info(f"Response sent to {chat_id}")
     except Exception as e:
         logger.error(f"Error processing message: {e}")
-        send_telegram_message(chat_id, f"Sorry, I ran into an issue: {e}")
+        await send_telegram_message(chat_id, f"Sorry, I ran into an issue: {e}")
 
 
-def polling_loop():
-    """Long-polling loop for Telegram updates. Runs in a background thread."""
+async def polling_loop():
+    """Long-polling loop for Telegram updates. Runs asynchronously."""
     global _offset
     logger.info("Starting Telegram polling loop...")
     
     while True:
         try:
-            updates = get_updates(offset=_offset, timeout=POLL_TIMEOUT)
+            updates = await get_updates(offset=_offset, timeout=POLL_TIMEOUT)
             if updates.get("ok") and updates.get("result"):
                 for update in updates["result"]:
                     try:
-                        process_update(update)
+                        await process_update(update)
                     except Exception as e:
                         logger.error(f"Error in process_update: {e}")
         except Exception as e:
             logger.error(f"Polling error: {e}")
-            import time
-            time.sleep(5)
+            import asyncio
+            await asyncio.sleep(5)
 
 
 @asynccontextmanager
@@ -146,16 +158,19 @@ async def lifespan(app: FastAPI):
     if USE_WEBHOOK:
         webhook_url = f"{AGENT_BASE_URL}{WEBHOOK_PATH}"
         logger.info(f"Setting webhook to {webhook_url}")
-        delete_webhook()
-        set_webhook(webhook_url)
+        await delete_webhook()
+        await set_webhook(webhook_url)
     else:
-        logger.info("Starting polling in background thread...")
-        t = threading.Thread(target=polling_loop, daemon=True)
-        t.start()
+        logger.info("Starting async polling...")
+        import asyncio
+        asyncio.create_task(polling_loop())
     
     yield
     
     logger.info("Shutting down...")
+    global _telegram_client
+    if _telegram_client:
+        await _telegram_client.aclose()
 
 
 app = FastAPI(title="Kitchen Agent", lifespan=lifespan)
@@ -166,7 +181,7 @@ async def telegram_webhook(req: Request):
     """Webhook endpoint — receives Telegram updates."""
     try:
         update = await req.json()
-        process_update(update)
+        await process_update(update)
     except Exception as e:
         logger.error(f"Webhook error: {e}")
     return Response(status_code=200)
@@ -205,14 +220,14 @@ class SendMessageRequest(BaseModel):
 async def chat(req: ChatRequest):
     """Direct chat endpoint (for testing without Telegram)."""
     agent = get_agent(req.chat_id)
-    response = agent.run(req.message, chat_id=req.chat_id)
+    response = await agent.run_async(req.message, chat_id=req.chat_id)
     return {"response": response, "chat_id": req.chat_id}
 
 
 @app.post("/internal/send-message")
 async def internal_send_message(req: SendMessageRequest):
     """Internal endpoint used by services (e.g., reminder daemon) to deliver Telegram messages."""
-    result = send_telegram_message(req.chat_id, req.text, parse_mode=req.parse_mode)
+    result = await send_telegram_message(req.chat_id, req.text, parse_mode=req.parse_mode)
     return {"status": "sent", "telegram_result": result}
 
 

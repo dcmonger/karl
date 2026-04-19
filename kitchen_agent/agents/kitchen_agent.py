@@ -1,11 +1,12 @@
 """Kitchen agent — LangGraph graph using ReAct style with Gemini."""
 import os
 import sys
+import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 from kitchen_agent.tools import TOOLS
 from kitchen_agent.storage.memory import (
@@ -100,13 +101,18 @@ class KitchenAgent:
         
         agent_tools = [*self.tools]
         
-        self.graph = create_react_agent(
+        self.graph = create_agent(
             model=self.llm,
             tools=agent_tools,
-            state_modifier=_build_system_prompt(chat_id),
+            system_prompt=_build_system_prompt(chat_id),
         )
     
     def run(self, user_message: str, chat_id: str = None) -> str:
+        """Synchronous wrapper for backward compatibility."""
+        return asyncio.run(self.run_async(user_message, chat_id))
+    
+    async def run_async(self, user_message: str, chat_id: str = None) -> str:
+        """Run the agent asynchronously using ainvoke."""
         cid = chat_id or self.chat_id
         append_interaction(cid, "user", user_message)
         
@@ -117,7 +123,7 @@ class KitchenAgent:
             elif msg.get("role") == "assistant":
                 prior_messages.append(AIMessage(content=msg.get("content", "")))
 
-        result = self.graph.invoke(
+        result = await self.graph.ainvoke(
             {"messages": [*prior_messages, HumanMessage(content=user_message)]},
         )
         
