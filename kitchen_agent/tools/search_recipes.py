@@ -1,21 +1,17 @@
-"""search_recipes tool — generates recipe suggestions using Gemini with current inventory."""
+"""search_recipes tool — generates recipe suggestions using configured LLM with current inventory."""
 from langchain_core.tools import tool
 from kitchen_agent.storage.database import InventoryDB
 from kitchen_agent.storage.vector_store import PreferenceStore, RecipeHistoryStore
 from kitchen_agent.storage.memory import get_working_memory
-from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL
+from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
 
 _inventory_db = InventoryDB()
 _pref_store = PreferenceStore()
 _recipe_store = RecipeHistoryStore()
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from kitchen_agent.agents.kitchen_agent import _get_llm
 
-_llm = ChatGoogleGenerativeAI(
-    model=GEMINI_MODEL,
-    google_api_key=GEMINI_KEY,
-    temperature=0.8,
-)
+_llm = _get_llm()
 
 SYSTEM_INSTRUCTION = """You are a friendly, practical kitchen assistant. You help users figure out what to cook with what they have, suggest new dishes, and inspire them to eat well. Be concise, enthusiastic, and practical. When suggesting recipes, include rough prep time, cook time, and key ingredients. If inventory is limited, suggest simple flexible recipes. If you recommend a recipe that needs marinating or advance prep, mention it. You know the user's preferences and inventory — respect their likes, dislikes, and dietary needs. Never suggest a recipe that uses ingredients they dislike or are allergic to. Keep responses conversational but informative."""
 
@@ -24,7 +20,7 @@ SYSTEM_INSTRUCTION = """You are a friendly, practical kitchen assistant. You hel
 def search_recipes(
     query: str = None,
     limit: int = 3,
-    chat_id: str = "default",
+    user_id: str = "default",
 ) -> str:
     """Search for recipe suggestions based on current inventory and preferences.
     
@@ -37,20 +33,20 @@ def search_recipes(
             "a challenging weekend project", "vegetarian", "something with chicken").
             If omitted, will suggest diverse options from current inventory.
         limit: How many recipe suggestions to return. Default 3, max 5.
-        chat_id: User identifier. Defaults to "default".
+        user_id: User identifier. Defaults to "default".
     
     Returns:
         Recipe suggestions with ingredients, brief instructions, and prep time.
         Also suggests items to add to shopping list if needed.
     """
-    memory = get_working_memory(chat_id)
-    prefs = _pref_store.search_preferences(chat_id, query or "food preferences", limit=5)
+    memory = get_working_memory(user_id)
+    prefs = _pref_store.search_preferences(user_id, query or "food preferences", limit=5)
     pref_lines = "\n".join([
         f"- {p.get('entity')}: {p.get('value')} ({p.get('type')})"
         for p in prefs
     ]) if prefs else "(no strong preferences recorded yet)"
     
-    recent_raw = _recipe_store.get_recent_recipes(chat_id, limit=5)
+    recent_raw = _recipe_store.get_recent_recipes(user_id, limit=5)
     recent_lines = "\n".join([f"- {r.get('recipe_name')}" for r in recent_raw if r.get('recipe_name')]) or "(none recorded)"
     
     prompt = f"""The user wants recipe suggestions.

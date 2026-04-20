@@ -12,10 +12,10 @@ def log_preference(
     preference_type: str,
     value: str,
     notes: str = None,
-    chat_id: str = "default",
+    user_id: str = "default",
 ) -> str:
     """Log a user preference or feedback about a food, recipe, ingredient, or cuisine.
-    
+
     Args:
         entity: What the preference is about (e.g., "salmon", "pasta", "Thai food").
         preference_type: Category of preference. Options:
@@ -28,19 +28,19 @@ def log_preference(
             - For food: "liked", "loved", "disliked", "hated", "avoid"
             - For cuisine/diet: any string describing the preference
         notes: Optional free-text notes (e.g., "but only when fresh").
-        chat_id: User identifier. Defaults to "default".
-    
+        user_id: User identifier. Defaults to "default".
+
     Returns:
         A confirmation string showing what was logged.
     """
     _pref_store.add_preference(
-        user_id=chat_id,
+        user_id=user_id,
         preference_type=preference_type,
         entity=entity,
         value=value,
         notes=notes,
     )
-    
+
     note_str = f" — {notes}" if notes else ""
     return (
         f"Logged: {preference_type} preference for '{entity}' → {value}{note_str}"
@@ -53,22 +53,22 @@ def log_recipe_feedback(
     feedback: str = None,
     rating: int = None,
     ingredients_used: list = None,
-    chat_id: str = "default",
+    user_id: str = "default",
 ) -> str:
     """Log that you cooked a recipe and your feedback on it.
-    
+
     Args:
         recipe_name: Name of the dish you made.
         feedback: Your thoughts — what you liked, what you'd change, etc.
         rating: Star rating 1-5.
         ingredients_used: List of ingredient names you used from inventory.
-        chat_id: User identifier. Defaults to "default".
-    
+        user_id: User identifier. Defaults to "default".
+
     Returns:
         A confirmation string.
     """
     _recipe_store.add_recipe(
-        user_id=chat_id,
+        user_id=user_id,
         recipe_name=recipe_name,
         ingredients=ingredients_used or [],
         feedback=feedback,

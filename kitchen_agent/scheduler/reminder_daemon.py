@@ -33,26 +33,26 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_API_BASE = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}" if TELEGRAM_TOKEN else ""
 
 
-def send_user_message(chat_id: str, text: str, parse_mode: str = "Markdown") -> dict:
+def send_user_message(user_id: str, text: str, parse_mode: str = "Markdown") -> dict:
     """Send a message directly to Telegram from the reminder daemon."""
     if not TELEGRAM_API_BASE:
         raise RuntimeError("TELEGRAM_TOKEN not configured for reminder daemon")
     response = requests.post(
         f"{TELEGRAM_API_BASE}/sendMessage",
-        json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
+        json={"chat_id": user_id, "text": text, "parse_mode": parse_mode},
         timeout=30,
     )
     response.raise_for_status()
     return response.json()
 
 
-def reminder_job(reminder_id: int, chat_id: str, title: str, message: str):
+def reminder_job(reminder_id: int, user_id: str, title: str, message: str):
     """The job that fires when a reminder is due."""
     try:
         full_msg = f"🔔 *{title}*\n\n{message}"
-        send_user_message(chat_id=chat_id, text=full_msg, parse_mode="Markdown")
-        logger.info(f"Reminder {reminder_id} fired for chat {chat_id}")
-        
+        send_user_message(user_id=user_id, text=full_msg, parse_mode="Markdown")
+        logger.info(f"Reminder {reminder_id} fired for user {user_id}")
+
         from kitchen_agent.storage.database import ReminderDB
         ReminderDB().mark_complete(reminder_id)
     except Exception as e:
@@ -61,7 +61,7 @@ def reminder_job(reminder_id: int, chat_id: str, title: str, message: str):
 
 class ScheduleRequest(BaseModel):
     reminder_id: int
-    chat_id: str
+    user_id: str
     title: str
     message: str
     scheduled_time: str
@@ -99,19 +99,19 @@ async def schedule_reminder(req: ScheduleRequest):
         raise HTTPException(status_code=400, detail="Invalid datetime format")
     
     if run_time <= datetime.now():
-        reminder_job(req.reminder_id, req.chat_id, req.title, req.message)
+        reminder_job(req.reminder_id, req.user_id, req.title, req.message)
         return {"status": "fired_immediately"}
-    
+
     job = scheduler.add_job(
         func=reminder_job,
         trigger="date",
         run_date=run_time,
-        args=[req.reminder_id, req.chat_id, req.title, req.message],
+        args=[req.reminder_id, req.user_id, req.title, req.message],
         id=str(req.reminder_id),
         replace_existing=True,
     )
-    
-    JOBS[req.reminder_id] = req.chat_id
+
+    JOBS[req.reminder_id] = req.user_id
     logger.info(f"Scheduled reminder {req.reminder_id} for {run_time}")
     return {"status": "scheduled", "job_id": job.id}
 

@@ -49,7 +49,7 @@ def init_db():
             message TEXT NOT NULL,
             scheduled_time TEXT NOT NULL,
             status TEXT DEFAULT 'pending',
-            chat_id TEXT,
+            user_id TEXT,
             metadata TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -202,15 +202,15 @@ class ShoppingListDB:
 class ReminderDB:
     def __init__(self):
         init_db()
-    
-    def add(self, title: str, message: str, scheduled_time: datetime, 
-            chat_id: str = None, metadata: dict = None):
+
+    def add(self, title: str, message: str, scheduled_time: datetime,
+            user_id: str = None, metadata: dict = None):
         conn = get_connection()
         c = conn.cursor()
         c.execute("""
-            INSERT INTO reminders (title, message, scheduled_time, chat_id, metadata)
+            INSERT INTO reminders (title, message, scheduled_time, user_id, metadata)
             VALUES (?, ?, ?, ?, ?)
-        """, (title, message, scheduled_time.isoformat(), chat_id, 
+        """, (title, message, scheduled_time.isoformat(), user_id,
               json.dumps(metadata) if metadata else None))
         conn.commit()
         last_id = c.lastrowid

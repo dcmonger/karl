@@ -12,26 +12,26 @@ def schedule_reminder(
     title: str,
     message: str,
     scheduled_time: str,
-    chat_id: str = "default",
+    user_id: str = "default",
     metadata: dict = None,
 ) -> str:
     """Schedule a proactive reminder to be sent to the user at a specific time.
-    
+
     This is how the agent becomes proactive — it schedules reminders so you
     don't forget to start marinating, thaw meat, prep ingredients, etc.
-    
+
     Args:
-        title: Short title for the reminder (e.g., "Marinate chicken", 
+        title: Short title for the reminder (e.g., "Marinate chicken",
             "Thaw ground beef", "Prep dough").
-        message: The full reminder message to send (e.g., 
+        message: The full reminder message to send (e.g.,
             "Time to put the chicken in the marinade for tonight's dinner!").
-        scheduled_time: When to send the reminder. Format: "YYYY-MM-DD HH:MM" 
-            (e.g., "2026-04-13 16:00"). Or use relative phrases like 
+        scheduled_time: When to send the reminder. Format: "YYYY-MM-DD HH:MM"
+            (e.g., "2026-04-13 16:00"). Or use relative phrases like
             "in 2 hours", "tomorrow at 9am" in your response text — but
             pass the parsed datetime here.
-        chat_id: User identifier for routing the Telegram message.
+        user_id: User identifier for routing the reminder.
         metadata: Optional extra data (e.g., {"recipe": "tzatziki chicken"}).
-    
+
     Returns:
         A confirmation with the reminder details and when it will fire.
     """
@@ -42,21 +42,21 @@ def schedule_reminder(
             f"Invalid time format: '{scheduled_time}'. "
             "Please use 'YYYY-MM-DD HH:MM' format."
         )
-    
+
     reminder_id = _reminder_db.add(
         title=title,
         message=message,
         scheduled_time=parsed_time,
-        chat_id=chat_id,
+        user_id=user_id,
         metadata=metadata,
     )
-    
+
     try:
         resp = requests.post(
             f"{REMINDER_DAEMON_URL}/schedule",
             json={
                 "reminder_id": reminder_id,
-                "chat_id": chat_id,
+                "user_id": user_id,
                 "title": title,
                 "message": message,
                 "scheduled_time": parsed_time.isoformat(),
@@ -67,7 +67,7 @@ def schedule_reminder(
             pass
     except requests.RequestException:
         pass
-    
+
     return (
         f"Reminder scheduled: '{title}'\n"
         f"Message: {message}\n"

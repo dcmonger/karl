@@ -85,10 +85,11 @@ async def delete_webhook() -> dict:
     return response.json()
 
 
-def get_agent(chat_id: str) -> KitchenAgent:
-    if chat_id not in _agents:
-        _agents[chat_id] = KitchenAgent(chat_id=chat_id)
-    return _agents[chat_id]
+def get_agent(user_id: str) -> KitchenAgent:
+    """Get or create agent for a user. Uses sender_id for memory continuity."""
+    if user_id not in _agents:
+        _agents[user_id] = KitchenAgent(user_id=user_id)
+    return _agents[user_id]
 
 
 def is_authorized_user(user_id: str) -> bool:
@@ -121,11 +122,11 @@ async def process_update(update: dict):
         await send_telegram_message(chat_id, "You're not an authorized user.")
         return
     
-    logger.info(f"Message from {chat_id}: {text[:80]}")
+    logger.info(f"Message from {sender_id}: {text[:80]}")
     
     try:
-        agent = get_agent(chat_id)
-        response = await agent.run_async(text, chat_id=chat_id)
+        agent = get_agent(sender_id)
+        response = await agent.run_async(text, user_id=sender_id)
         await send_telegram_message(chat_id, response)
         logger.info(f"Response sent to {chat_id}")
     except Exception as e:
@@ -176,6 +177,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Kitchen Agent", lifespan=lifespan)
 
 
+@app.get("/")
+async def root():
+    return {"agent": "Karl - Kitchen Manager"}
+
+
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(req: Request):
     """Webhook endpoint — receives Telegram updates."""
@@ -190,45 +196,6 @@ async def telegram_webhook(req: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "mode": "webhook" if USE_WEBHOOK else "polling"}
-
-
-@app.get("/")
-async def root():
-    return {
-        "agent": "Karl - Kitchen Manager",
-        "endpoints": {
-            "chat": "POST /chat",
-            "inventory": "GET /inventory",
-            "shopping": "GET /shopping",
-            "telegram_webhook": f"POST {WEBHOOK_PATH}",
-        }
-    }
-
-
-class ChatRequest(BaseModel):
-    message: str
-    chat_id: str = "default"
-
-
-class SendMessageRequest(BaseModel):
-    chat_id: str
-    text: str
-    parse_mode: str = "Markdown"
-
-
-@app.post("/chat")
-async def chat(req: ChatRequest):
-    """Direct chat endpoint (for testing without Telegram)."""
-    agent = get_agent(req.chat_id)
-    response = await agent.run_async(req.message, chat_id=req.chat_id)
-    return {"response": response, "chat_id": req.chat_id}
-
-
-@app.post("/internal/send-message")
-async def internal_send_message(req: SendMessageRequest):
-    """Internal endpoint used by services (e.g., reminder daemon) to deliver Telegram messages."""
-    result = await send_telegram_message(req.chat_id, req.text, parse_mode=req.parse_mode)
-    return {"status": "sent", "telegram_result": result}
 
 
 if __name__ == "__main__":

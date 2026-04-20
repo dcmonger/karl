@@ -52,20 +52,6 @@ AUTHORIZED_TELEGRAM_USER_IDS=123456789  # optional allowlist
 - `kitchen_agent/storage/database.py` — SQLite schema + InventoryDB, ShoppingListDB, ReminderDB, MemoryDB
 - `kitchen_agent/storage/vector_store.py` — ChromaDB collections: PreferenceStore, RecipeHistoryStore
 
-## Memory maintenance
-Run periodically (e.g., every 6h via cron):
-```bash
-python -m kitchen_agent.scripts.memory_maintenance
-```
-
-## Testing the agent
-```bash
-# Via CLI (no Telegram needed)
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "what do I have in my fridge?", "chat_id": "test"}'
-```
-
 ## Code style
 - Keep changes focused and minimal.
 - Use `rg` for search.

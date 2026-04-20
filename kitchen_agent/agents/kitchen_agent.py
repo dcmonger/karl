@@ -1,4 +1,4 @@
-"""Kitchen agent — LangGraph graph using ReAct style with Gemini."""
+"""Kitchen agent — LangGraph graph using ReAct style with configurable LLM."""
 import os
 import sys
 import asyncio
@@ -6,6 +6,7 @@ import asyncio
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.runnables import BaseRunnable
 from langchain.agents import create_agent
 
 from kitchen_agent.tools import TOOLS
@@ -15,11 +16,30 @@ from kitchen_agent.storage.memory import (
     append_conversation_message,
     get_conversation_history,
 )
-from kitchen_agent.config.settings import GEMINI_KEY, GEMINI_MODEL
+from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
 
 
-def _build_system_prompt(chat_id: str) -> str:
-    memory = get_working_memory(chat_id)
+def _get_llm() -> BaseRunnable:
+    """Get the LLM based on configured provider."""
+    if LLM_PROVIDER == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=GEMINI_KEY,
+            temperature=0.7,
+        )
+    elif LLM_PROVIDER == "openai":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=MODEL_NAME,
+            temperature=0.7,
+        )
+    else:
+        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER}")
+
+
+def _build_system_prompt(user_id: str) -> str:
+    memory = get_working_memory(user_id)
     
     interaction_summary = ""
     try:
@@ -87,15 +107,10 @@ Be helpful, proactive, and concise. Aim to make the user's cooking life easier a
 
 
 class KitchenAgent:
-    def __init__(self, chat_id: str = "default"):
-        self.chat_id = chat_id
+    def __init__(self, user_id: str = "default"):
+        self.user_id = user_id
         
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        self.llm = ChatGoogleGenerativeAI(
-            model=GEMINI_MODEL,
-            google_api_key=GEMINI_KEY,
-            temperature=0.7,
-        )
+        self.llm = _get_llm()
         
         self.tools = TOOLS
         
@@ -104,20 +119,20 @@ class KitchenAgent:
         self.graph = create_agent(
             model=self.llm,
             tools=agent_tools,
-            system_prompt=_build_system_prompt(chat_id),
+            system_prompt=_build_system_prompt(user_id),
         )
     
-    def run(self, user_message: str, chat_id: str = None) -> str:
+    def run(self, user_message: str, user_id: str = None) -> str:
         """Synchronous wrapper for backward compatibility."""
-        return asyncio.run(self.run_async(user_message, chat_id))
+        return asyncio.run(self.run_async(user_message, user_id))
     
-    async def run_async(self, user_message: str, chat_id: str = None) -> str:
+    async def run_async(self, user_message: str, user_id: str = None) -> str:
         """Run the agent asynchronously using ainvoke."""
-        cid = chat_id or self.chat_id
-        append_interaction(cid, "user", user_message)
+        uid = user_id or self.user_id
+        append_interaction(uid, "user", user_message)
         
         prior_messages = []
-        for msg in get_conversation_history(cid, limit=8, max_total_chars=3000):
+        for msg in get_conversation_history(uid, limit=8, max_total_chars=3000):
             if msg.get("role") == "user":
                 prior_messages.append(HumanMessage(content=msg.get("content", "")))
             elif msg.get("role") == "assistant":
@@ -130,7 +145,7 @@ class KitchenAgent:
         last_msg = result["messages"][-1]
         response = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
         
-        append_interaction(cid, "assistant", response)
-        append_conversation_message(cid, "user", user_message)
-        append_conversation_message(cid, "assistant", response)
+        append_interaction(uid, "assistant", response)
+        append_conversation_message(uid, "user", user_message)
+        append_conversation_message(uid, "assistant", response)
         return response
