@@ -1,6 +1,12 @@
 """update_inventory tool — manage inventory (add, update, consume, remove)."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import get_inventory_db
+from kitchen_agent.memory import (
+    set_user_id,
+    add_inventory_item,
+    remove_inventory_item,
+    update_inventory_quantity,
+    get_inventory_item,
+)
 
 
 @tool
@@ -35,11 +41,11 @@ def update_inventory(
     Returns:
         A confirmation string.
     """
-    inventory_db = get_inventory_db(user_id=user_id)
+    set_user_id(user_id)
 
     if action == "add":
-        existing = inventory_db.get_item(item_name)
-        inventory_db.add_item(
+        existing = get_inventory_item(item_name)
+        add_inventory_item(
             name=item_name,
             quantity=quantity or "1",
             unit=unit,
@@ -52,19 +58,19 @@ def update_inventory(
         return f"{action_str} inventory: {item_name} = {quantity or '1'}{unit_str} in {location}."
 
     elif action == "consume":
-        existing = inventory_db.get_item(item_name)
+        existing = get_inventory_item(item_name)
         if not existing:
             return f"'{item_name}' is not in inventory."
         if quantity is None:
-            inventory_db.delete_item(item_name)
+            remove_inventory_item(item_name)
             return f"Used up {item_name}, removed from inventory."
-        inventory_db.update_quantity(item_name, quantity)
+        update_inventory_quantity(item_name, quantity)
         unit = existing.get("unit")
         unit_str = f" {unit}" if unit else ""
         return f"Updated {item_name} remaining to {quantity}{unit_str}."
 
     elif action == "check":
-        item = inventory_db.get_item(item_name)
+        item = get_inventory_item(item_name)
         if not item:
             return f"'{item_name}' is not in inventory."
         from datetime import datetime
@@ -83,7 +89,7 @@ def update_inventory(
         )
 
     elif action == "remove":
-        inventory_db.delete_item(item_name)
+        remove_inventory_item(item_name)
         return f"Removed '{item_name}' from inventory."
 
     else:
