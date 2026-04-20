@@ -1,11 +1,36 @@
-"""Long-term memory management — combines SQLite summaries + ChromaDB semantic store."""
+"""Unified storage API — all storage access goes through this module."""
 from datetime import datetime
-from kitchen_agent.storage.database import MemoryDB
-from kitchen_agent.storage.vector_store import PreferenceStore, RecipeHistoryStore
+from kitchen_agent.memory.relational_store import (
+    MemoryDB,
+    InventoryDB,
+    ShoppingListDB,
+    ReminderDB,
+)
+from kitchen_agent.memory.vector_store import PreferenceStore, RecipeHistoryStore
 
 _memory_db = MemoryDB()
 _pref_store = PreferenceStore()
 _recipe_store = RecipeHistoryStore()
+
+
+def get_inventory_db(user_id: str = "default") -> InventoryDB:
+    return InventoryDB(user_id=user_id)
+
+
+def get_shopping_db(user_id: str = "default") -> ShoppingListDB:
+    return ShoppingListDB(user_id=user_id)
+
+
+def get_reminder_db(user_id: str = "default") -> ReminderDB:
+    return ReminderDB(user_id=user_id)
+
+
+def get_pref_store() -> PreferenceStore:
+    return _pref_store
+
+
+def get_recipe_store() -> RecipeHistoryStore:
+    return _recipe_store
 
 RECENT_INTERACTIONS_KEY = "recent_interactions"
 

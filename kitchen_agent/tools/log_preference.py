@@ -1,9 +1,9 @@
 """log_preference tool — stores user preferences and feedback in ChromaDB."""
 from langchain_core.tools import tool
-from kitchen_agent.storage.vector_store import PreferenceStore, RecipeHistoryStore
+from kitchen_agent.memory import get_pref_store, get_recipe_store
 
-_pref_store = PreferenceStore()
-_recipe_store = RecipeHistoryStore()
+_pref_store = get_pref_store()
+_recipe_store = get_recipe_store()
 
 
 @tool

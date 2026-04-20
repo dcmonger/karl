@@ -53,8 +53,8 @@ def reminder_job(reminder_id: int, user_id: str, title: str, message: str):
         send_user_message(user_id=user_id, text=full_msg, parse_mode="Markdown")
         logger.info(f"Reminder {reminder_id} fired for user {user_id}")
 
-        from kitchen_agent.storage.database import ReminderDB
-        ReminderDB().mark_complete(reminder_id)
+        from kitchen_agent.memory import get_reminder_db
+        get_reminder_db(user_id=user_id).mark_complete(reminder_id)
     except Exception as e:
         logger.error(f"Error firing reminder {reminder_id}: {e}")
 

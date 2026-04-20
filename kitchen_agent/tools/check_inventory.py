@@ -1,6 +1,6 @@
 """check_inventory tool — lists all inventory items with optional location filter."""
 from langchain_core.tools import tool
-from kitchen_agent.storage.database import InventoryDB
+from kitchen_agent.memory import get_inventory_db
 from datetime import datetime
 
 
@@ -16,7 +16,7 @@ def check_inventory(user_id: str = "default", location: str = None) -> str:
         A formatted string listing all matching inventory items with their
         quantity, unit, location, and expiry date if applicable.
     """
-    inventory_db = InventoryDB(user_id=user_id)
+    inventory_db = get_inventory_db(user_id=user_id)
     items = inventory_db.get_all_items(location=location)
 
     if not items:

@@ -10,7 +10,7 @@ from langchain_core.runnables import BaseRunnable
 from langchain.agents import create_agent
 
 from kitchen_agent.tools import TOOLS
-from kitchen_agent.storage.memory import (
+from kitchen_agent.memory import (
     get_working_memory,
     append_interaction,
     append_conversation_message,
@@ -40,15 +40,6 @@ def _get_llm() -> BaseRunnable:
 
 def _build_system_prompt(user_id: str) -> str:
     memory = get_working_memory(user_id)
-    
-    interaction_summary = ""
-    try:
-        from kitchen_agent.storage.memory import get_interaction_summary
-        interaction_summary = get_interaction_summary()
-    except Exception:
-        pass
-    
-    learned_context = f"### Learned Context:\n{interaction_summary}" if interaction_summary else ""
 
     prompt = f"""You are Karl — a friendly, practical kitchen manager and cooking assistant.
 
@@ -81,13 +72,18 @@ def _build_system_prompt(user_id: str) -> str:
 
 ## TOOL USAGE GUIDELINES
 - Call check_inventory() to see what the user has (always do this for recipe suggestions)
-- Call get_item_quantity() to check a specific item's details
+- Call update_inventory(action="check", ...) to check item details (replaces get_item_quantity)
 - Call search_recipes() to generate recipe ideas based on inventory + preferences
-- Call add_to_shopping_list() when recommending items to buy
+- Call update_shopping_list(action="add", ...) to add items to shopping list
+- Call update_shopping_list(action="mark_bought", ...) when user says they bought something
+- Call update_shopping_list(action="remove", ...) to remove items from shopping list
 - Call log_preference() or log_recipe_feedback() when the user shares feedback
-- Call schedule_reminder() when a recipe needs advance prep (marinating, thawing, proofing)
-- Call update_inventory() when the user says they bought/restocked something
-- Call consume_inventory() when the user says they used up or consumed inventory
+- Call update_reminder(action="add", ...) to schedule reminders for advance prep
+- Call update_reminder(action="list", ...) to see upcoming reminders
+- Call update_reminder(action="cancel", ...) to cancel a reminder
+- Call update_inventory(action="add", ...) when user says they bought/restocked something
+- Call update_inventory(action="consume", ...) when user says they used up something
+- Call update_inventory(action="remove", ...) to delete an item from inventory
 
 ## IMPORTANT RULES
 - Always respect the user's dietary preferences and restrictions
@@ -98,7 +94,7 @@ def _build_system_prompt(user_id: str) -> str:
   automatically schedule a reminder unless the user declines
 - Keep responses conversational, warm, and practical — not overly formal
 - When asked "what's in my fridge/pantry?", use check_inventory()
-- When asked "should I buy X", use get_item_quantity() to check stock first
+- When asked "should I buy X", use update_inventory(action="check", ...) to check stock first
 - When the user says they cooked something, ask for feedback and log it
 - If the user says "too expensive" or "can't find" about a shopping item, log that feedback
 

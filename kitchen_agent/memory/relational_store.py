@@ -207,67 +207,77 @@ class ShoppingListDB:
 
 
 class ReminderDB:
-    def __init__(self):
+    def __init__(self, user_id: str = "default"):
         init_db()
+        self.user_id = user_id
 
     def add(self, title: str, message: str, scheduled_time: datetime,
-            user_id: str = None, metadata: dict = None):
+            metadata: dict = None):
         conn = get_connection()
         c = conn.cursor()
         c.execute("""
             INSERT INTO reminders (title, message, scheduled_time, user_id, metadata)
             VALUES (?, ?, ?, ?, ?)
-        """, (title, message, scheduled_time.isoformat(), user_id,
+        """, (title, message, scheduled_time.isoformat(), self.user_id,
               json.dumps(metadata) if metadata else None))
         conn.commit()
         last_id = c.lastrowid
         conn.close()
         return last_id
-    
+
     def get_due(self) -> list:
         conn = get_connection()
         c = conn.cursor()
         c.execute("""
-            SELECT * FROM reminders 
-            WHERE status = 'pending' AND scheduled_time <= ?
+            SELECT * FROM reminders
+            WHERE user_id = ? AND status = 'pending' AND scheduled_time <= ?
             ORDER BY scheduled_time
-        """, (datetime.now().isoformat(),))
+        """, (self.user_id, datetime.now().isoformat()))
         rows = c.fetchall()
         conn.close()
         return [dict(row) for row in rows]
-    
+
     def get_by_id(self, id: int) -> Optional[dict]:
         conn = get_connection()
         c = conn.cursor()
-        c.execute("SELECT * FROM reminders WHERE id = ?", (id,))
+        c.execute("SELECT * FROM reminders WHERE user_id = ? AND id = ?", (self.user_id, id))
         row = c.fetchone()
         conn.close()
         return dict(row) if row else None
-    
+
     def get_upcoming(self, limit: int = 10) -> list:
         conn = get_connection()
         c = conn.cursor()
         c.execute("""
-            SELECT * FROM reminders 
-            WHERE status = 'pending' AND scheduled_time > ?
+            SELECT * FROM reminders
+            WHERE user_id = ? AND status = 'pending' AND scheduled_time > ?
             ORDER BY scheduled_time
             LIMIT ?
-        """, (datetime.now().isoformat(), limit))
+        """, (self.user_id, datetime.now().isoformat(), limit))
         rows = c.fetchall()
         conn.close()
         return [dict(row) for row in rows]
-    
+
+    def get_all(self) -> list:
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("SELECT * FROM reminders WHERE user_id = ? ORDER BY scheduled_time", (self.user_id,))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
     def mark_complete(self, id: int):
         conn = get_connection()
         c = conn.cursor()
-        c.execute("UPDATE reminders SET status = 'completed' WHERE id = ?", (id,))
+        c.execute("UPDATE reminders SET status = 'completed' WHERE user_id = ? AND id = ?",
+                  (self.user_id, id))
         conn.commit()
         conn.close()
-    
+
     def delete(self, id: int):
         conn = get_connection()
         c = conn.cursor()
-        c.execute("DELETE FROM reminders WHERE id = ?", (id,))
+        c.execute("DELETE FROM reminders WHERE user_id = ? AND id = ?", (self.user_id, id))
         conn.commit()
         conn.close()
 
