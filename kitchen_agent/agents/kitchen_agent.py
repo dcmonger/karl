@@ -51,24 +51,11 @@ def _build_system_prompt(user_id: str) -> str:
 - Proactively remind users to prep ingredients (marinades, thawing, etc.)
 - Learn from feedback to improve future suggestions
 
-## WORKING CONTEXT
-
-### Current Inventory ({memory['inventory_count']} items):
-{memory['inventory']}
-
-### Shopping List ({memory['shopping_count']} items pending):
-{memory['shopping_list']}
-
-### Your Preferences (liked/disliked):
+## YOUR PREFERENCES (liked/disliked):
 {memory['preferences']}
 
 ### Recent Meals You've Made:
 {memory['recent_recipes']}
-
-### Upcoming Reminders:
-{memory['upcoming_reminders']}
-
-{learned_context}
 
 ## TOOL USAGE GUIDELINES
 - Call check_inventory() to see what the user has (always do this for recipe suggestions)
