@@ -1,14 +1,13 @@
 """Unified storage API — all storage access goes through this module."""
 from datetime import datetime
 from kitchen_agent.memory.relational_store import (
-    MemoryDB,
+    ConversationDB,
     InventoryDB,
     ShoppingListDB,
     ReminderDB,
 )
-from kitchen_agent.memory.vector_store import PreferenceStore, RecipeHistoryStore
 
-_memory_db = MemoryDB()
+_conversation_db = ConversationDB()
 _pref_store = PreferenceStore()
 _recipe_store = RecipeHistoryStore()
 
@@ -66,7 +65,7 @@ def get_working_memory(user_id: str = None) -> dict:
         for r in recent_recipes if r.get("recipe_name")
     ]
 
-    recent_interactions_raw = _memory_db.get(_interaction_key(user_id)) or {"interactions": []}
+    recent_interactions_raw = _conversation_db.get(_interaction_key(user_id)) or {"interactions": []}
     recent_interactions = recent_interactions_raw.get("interactions", [])[-10:]
 
     return {
@@ -78,7 +77,7 @@ def get_working_memory(user_id: str = None) -> dict:
 
 def append_interaction(user_id: str, role: str, content: str):
     """Append a turn to the rolling recent interactions log."""
-    raw = _memory_db.get(_interaction_key(user_id)) or {"interactions": []}
+    raw = _conversation_db.get(_interaction_key(user_id)) or {"interactions": []}
     interactions = raw["interactions"]
     interactions.append({
         "role": role,
@@ -87,13 +86,13 @@ def append_interaction(user_id: str, role: str, content: str):
     })
     if len(interactions) > MAX_RECENT_INTERACTIONS:
         interactions = interactions[-MAX_RECENT_INTERACTIONS:]
-    _memory_db.set(_interaction_key(user_id), {"interactions": interactions})
+    _conversation_db.set(_interaction_key(user_id), {"interactions": interactions})
 
 
 def append_conversation_message(user_id: str, role: str, content: str):
     """Persist full conversation history per user for restart-safe context."""
     key = _conversation_key(user_id)
-    raw = _memory_db.get(key) or {"messages": []}
+    raw = _conversation_db.get(key) or {"messages": []}
     messages = raw.get("messages", [])
     messages.append({
         "role": role,
@@ -102,7 +101,7 @@ def append_conversation_message(user_id: str, role: str, content: str):
     })
     if len(messages) > 200:
         messages = messages[-200:]
-    _memory_db.set(key, {"messages": messages})
+    _conversation_db.set(key, {"messages": messages})
 
 
 def get_conversation_history(
@@ -111,7 +110,7 @@ def get_conversation_history(
     max_total_chars: int = 3000,
 ) -> list[dict]:
     """Load a bounded slice of persisted conversation history."""
-    raw = _memory_db.get(_conversation_key(user_id)) or {"messages": []}
+    raw = _conversation_db.get(_conversation_key(user_id)) or {"messages": []}
     messages = raw.get("messages", [])[-limit:]
 
     bounded: list[dict] = []

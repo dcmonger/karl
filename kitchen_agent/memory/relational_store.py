@@ -281,7 +281,7 @@ class ReminderDB:
         conn.commit()
         conn.close()
 
-class MemoryDB:
+class ConversationDB:
     def __init__(self):
         init_db()
     
