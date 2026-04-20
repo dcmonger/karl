@@ -1,12 +1,7 @@
 """update_reminder tool — manage reminders (add, list, delete, complete)."""
 import requests
 from langchain_core.tools import tool
-from kitchen_agent.memory import (
-    retrieve_reminders,
-    add_reminder,
-    complete_reminder,
-    delete_reminder,
-)
+from kitchen_agent.memory import get_profile
 from kitchen_agent.config.settings import REMINDER_DAEMON_URL
 from datetime import datetime
 
@@ -41,6 +36,8 @@ def update_reminder(
     Returns:
         A confirmation or list of reminders.
     """
+    profile = get_profile(user_id)
+
     if action == "add":
         if not title or not message or not scheduled_time:
             return "Add requires title, message, and scheduled_time."
@@ -50,8 +47,7 @@ def update_reminder(
         except ValueError:
             return f"Invalid time: '{scheduled_time}'. Use 'YYYY-MM-DD HH:MM'."
 
-        reminder_id = add_reminder(
-            user_id=user_id,
+        reminder_id = profile.add_reminder(
             title=title,
             message=message,
             scheduled_time=parsed_time,
@@ -80,7 +76,7 @@ def update_reminder(
         )
 
     elif action == "list":
-        reminders = retrieve_reminders(user_id=user_id)
+        reminders = profile.retrieve_reminders()
         if not reminders:
             return "No upcoming reminders."
         lines = []
@@ -92,7 +88,7 @@ def update_reminder(
     elif action == "cancel":
         if not reminder_id:
             return "cancel requires reminder_id."
-        delete_reminder(user_id=user_id, reminder_id=reminder_id)
+        profile.delete_reminder(reminder_id)
         try:
             requests.delete(
                 f"{REMINDER_DAEMON_URL}/schedule/{reminder_id}",
@@ -105,7 +101,7 @@ def update_reminder(
     elif action == "complete":
         if not reminder_id:
             return "complete requires reminder_id."
-        complete_reminder(user_id=user_id, reminder_id=reminder_id)
+        profile.complete_reminder(reminder_id)
         return f"Marked reminder {reminder_id} as complete."
 
     else:

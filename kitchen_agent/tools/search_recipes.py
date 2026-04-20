@@ -1,10 +1,7 @@
 """search_recipes tool — generates recipe suggestions using configured LLM with current inventory."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import retrieve_inventory, get_working_memory, get_pref_store, get_recipe_store
+from kitchen_agent.memory import get_profile, get_working_memory
 from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
-
-_pref_store = get_pref_store()
-_recipe_store = get_recipe_store()
 
 from kitchen_agent.agents.kitchen_agent import _get_llm
 
@@ -36,20 +33,21 @@ def search_recipes(
         Recipe suggestions with ingredients, brief instructions, and prep time.
         Also suggests items to add to shopping list if needed.
     """
+    profile = get_profile(user_id)
     memory = get_working_memory(user_id)
-    inv_items = retrieve_inventory(user_id=user_id)
+    inv_items = profile.retrieve_inventory()
     inv_lines = "\n".join([
         f"- {i['item_name']}: {i['quantity']} {i.get('unit', '')} [{i['location']}]"
         for i in inv_items
     ]) if inv_items else "(empty)"
 
-    prefs = _pref_store.search_preferences(user_id, query or "food preferences", limit=5)
+    prefs = profile.search_preferences(query or "food preferences", limit=5)
     pref_lines = "\n".join([
         f"- {p.get('entity')}: {p.get('value')} ({p.get('type')})"
         for p in prefs
     ]) if prefs else "(no strong preferences recorded yet)"
 
-    recent_raw = _recipe_store.get_recent_recipes(user_id, limit=5)
+    recent_raw = profile.get_recent_recipes(limit=5)
     recent_lines = "\n".join([f"- {r.get('recipe_name')}" for r in recent_raw if r.get('recipe_name')]) or "(none recorded)"
 
     prompt = f"""The user wants recipe suggestions.

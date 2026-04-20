@@ -1,11 +1,6 @@
 """update_inventory tool — manage inventory (add, update, consume, remove)."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import (
-    add_inventory_item,
-    remove_inventory_item,
-    update_inventory_quantity,
-    get_inventory_item,
-)
+from kitchen_agent.memory import get_profile
 
 
 @tool
@@ -40,10 +35,11 @@ def update_inventory(
     Returns:
         A confirmation string.
     """
+    profile = get_profile(user_id)
+
     if action == "add":
-        existing = get_inventory_item(user_id=user_id, name=item_name)
-        add_inventory_item(
-            user_id=user_id,
+        existing = profile.get_inventory_item(item_name)
+        profile.add_inventory_item(
             name=item_name,
             quantity=quantity or "1",
             unit=unit,
@@ -56,19 +52,19 @@ def update_inventory(
         return f"{action_str} inventory: {item_name} = {quantity or '1'}{unit_str} in {location}."
 
     elif action == "consume":
-        existing = get_inventory_item(user_id=user_id, name=item_name)
+        existing = profile.get_inventory_item(item_name)
         if not existing:
             return f"'{item_name}' is not in inventory."
         if quantity is None:
-            remove_inventory_item(user_id=user_id, name=item_name)
+            profile.remove_inventory_item(item_name)
             return f"Used up {item_name}, removed from inventory."
-        update_inventory_quantity(user_id=user_id, name=item_name, quantity=quantity)
+        profile.update_inventory_quantity(item_name, quantity)
         unit = existing.get("unit")
         unit_str = f" {unit}" if unit else ""
         return f"Updated {item_name} remaining to {quantity}{unit_str}."
 
     elif action == "check":
-        item = get_inventory_item(user_id=user_id, name=item_name)
+        item = profile.get_inventory_item(item_name)
         if not item:
             return f"'{item_name}' is not in inventory."
         from datetime import datetime
@@ -87,7 +83,7 @@ def update_inventory(
         )
 
     elif action == "remove":
-        remove_inventory_item(user_id=user_id, name=item_name)
+        profile.remove_inventory_item(item_name)
         return f"Removed '{item_name}' from inventory."
 
     else:

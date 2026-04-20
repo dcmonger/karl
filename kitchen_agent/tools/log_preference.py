@@ -1,9 +1,6 @@
 """log_preference tool — stores user preferences and feedback in ChromaDB."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import get_pref_store, get_recipe_store
-
-_pref_store = get_pref_store()
-_recipe_store = get_recipe_store()
+from kitchen_agent.memory import get_profile
 
 
 @tool
@@ -28,13 +25,13 @@ def log_preference(
             - For food: "liked", "loved", "disliked", "hated", "avoid"
             - For cuisine/diet: any string describing the preference
         notes: Optional free-text notes (e.g., "but only when fresh").
-        user_id: User identifier. Defaults to "default".
+user_id: User identifier.
 
     Returns:
         A confirmation string showing what was logged.
     """
-    _pref_store.add_preference(
-        user_id=user_id,
+    profile = get_profile(user_id)
+    profile.add_preference(
         preference_type=preference_type,
         entity=entity,
         value=value,
@@ -67,8 +64,8 @@ def log_recipe_feedback(
     Returns:
         A confirmation string.
     """
-    _recipe_store.add_recipe(
-        user_id=user_id,
+    profile = get_profile(user_id)
+    profile.add_recipe(
         recipe_name=recipe_name,
         ingredients=ingredients_used or [],
         feedback=feedback,

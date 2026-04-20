@@ -1,6 +1,6 @@
 """check_inventory tool — lists all inventory items with optional location filter."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import retrieve_inventory
+from kitchen_agent.memory import get_profile
 from datetime import datetime
 
 
@@ -16,7 +16,8 @@ def check_inventory(user_id: str = "default", location: str = None) -> str:
         A formatted string listing all matching inventory items with their
         quantity, unit, location, and expiry date if applicable.
     """
-    items = retrieve_inventory(user_id=user_id, location=location)
+    profile = get_profile(user_id)
+    items = profile.retrieve_inventory(location=location)
 
     if not items:
         loc_hint = f" in {location}" if location else ""

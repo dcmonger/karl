@@ -1,10 +1,6 @@
 """update_shopping_list tool — manages the shopping list."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import (
-    add_shopping_item,
-    remove_shopping_item,
-    update_shopping_item_status,
-)
+from kitchen_agent.memory import get_profile
 
 
 @tool
@@ -43,9 +39,10 @@ def update_shopping_list(
     Returns:
         A confirmation string.
     """
+    profile = get_profile(user_id)
+
     if action == "add":
-        add_shopping_item(
-            user_id=user_id,
+        profile.add_shopping_item(
             item=item_name,
             quantity=quantity,
             unit=unit,
@@ -68,15 +65,15 @@ def update_shopping_list(
         )
 
     elif action == "remove":
-        remove_shopping_item(user_id=user_id, item=item_name)
+        profile.remove_shopping_item(item_name)
         return f"Removed '{item_name}' from shopping list."
 
     elif action == "mark_bought":
-        update_shopping_item_status(user_id=user_id, item=item_name, status="bought", feedback=None)
+        profile.update_shopping_item_status(item_name, "bought", feedback=None)
         return f"Marked '{item_name}' as bought."
 
     elif action == "mark_pending":
-        update_shopping_item_status(user_id=user_id, item=item_name, status="pending", feedback=None)
+        profile.update_shopping_item_status(item_name, "pending", feedback=None)
         return f"Marked '{item_name}' as pending."
 
     else:
