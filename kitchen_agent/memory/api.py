@@ -6,6 +6,7 @@ from kitchen_agent.memory.relational_store import (
     ShoppingListDB,
     ReminderDB,
 )
+from kitchen_agent.memory.vector_store import PreferenceStore, RecipeHistoryStore
 
 _conversation_db = ConversationDB()
 _pref_store = PreferenceStore()
