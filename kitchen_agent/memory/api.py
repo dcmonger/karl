@@ -13,66 +13,59 @@ _pref_store = PreferenceStore()
 _recipe_store = RecipeHistoryStore()
 
 
-def set_user_id(user_id: str = "default") -> None:
-    """Set the current user for subsequent calls."""
-    global _current_user_id
-    _current_user_id = user_id
-
-
-_current_user_id = "default"
-
-
-def retrieve_inventory(location: str = None) -> list:
+def retrieve_inventory(user_id: str = "default", location: str = None) -> list:
     """Get all inventory items, optionally filtered by location."""
-    db = InventoryDB(user_id=_current_user_id)
+    db = InventoryDB(user_id=user_id)
     return db.get_all_items(location=location)
 
 
 def add_inventory_item(
-    name: str,
-    quantity: str,
+    user_id: str = "default",
+    name: str = None,
+    quantity: str = None,
     unit: str = None,
     location: str = "pantry",
     category: str = None,
     expiry_days: int = None,
 ) -> None:
     """Add or update an inventory item."""
-    db = InventoryDB(user_id=_current_user_id)
+    db = InventoryDB(user_id=user_id)
     db.add_item(name, quantity, unit, location, category, expiry_days)
 
 
-def remove_inventory_item(name: str) -> None:
+def remove_inventory_item(user_id: str = "default", name: str = None) -> None:
     """Remove an item from inventory."""
-    db = InventoryDB(user_id=_current_user_id)
+    db = InventoryDB(user_id=user_id)
     db.delete_item(name)
 
 
-def update_inventory_quantity(name: str, quantity: str) -> None:
+def update_inventory_quantity(user_id: str = "default", name: str = None, quantity: str = None) -> None:
     """Update quantity of an inventory item."""
-    db = InventoryDB(user_id=_current_user_id)
+    db = InventoryDB(user_id=user_id)
     db.update_quantity(name, quantity)
 
 
-def get_inventory_item(name: str) -> dict:
+def get_inventory_item(user_id: str = "default", name: str = None) -> dict:
     """Get a specific inventory item."""
-    db = InventoryDB(user_id=_current_user_id)
+    db = InventoryDB(user_id=user_id)
     return db.get_item(name)
 
 
-def get_expiring_inventory(days: int = 3) -> list:
+def get_expiring_inventory(user_id: str = "default", days: int = 3) -> list:
     """Get items expiring within given days."""
-    db = InventoryDB(user_id=_current_user_id)
+    db = InventoryDB(user_id=user_id)
     return db.get_expiring_items(days)
 
 
-def retrieve_shopping_list(status: str = None) -> list:
+def retrieve_shopping_list(user_id: str = "default", status: str = None) -> list:
     """Get shopping list items, optionally filtered by status."""
-    db = ShoppingListDB(user_id=_current_user_id)
+    db = ShoppingListDB(user_id=user_id)
     return db.get_all(status=status)
 
 
 def add_shopping_item(
-    item: str,
+    user_id: str = "default",
+    item: str = None,
     quantity: str = None,
     unit: str = None,
     reason: str = None,
@@ -80,43 +73,54 @@ def add_shopping_item(
     priority: int = 1,
 ) -> None:
     """Add an item to shopping list."""
-    db = ShoppingListDB(user_id=_current_user_id)
+    db = ShoppingListDB(user_id=user_id)
     db.add(item, quantity, unit, reason, source_recipe, priority)
 
 
-def remove_shopping_item(item: str) -> None:
+def remove_shopping_item(user_id: str = "default", item: str = None) -> None:
     """Remove an item from shopping list."""
-    db = ShoppingListDB(user_id=_current_user_id)
+    db = ShoppingListDB(user_id=user_id)
     db.remove(item)
 
 
-def update_shopping_item_status(item: str, status: str, feedback: str = None) -> None:
+def update_shopping_item_status(
+    user_id: str = "default",
+    item: str = None,
+    status: str = None,
+    feedback: str = None,
+) -> None:
     """Update status of a shopping item."""
-    db = ShoppingListDB(user_id=_current_user_id)
+    db = ShoppingListDB(user_id=user_id)
     db.update_status(item, status, feedback)
 
 
-def retrieve_reminders() -> list:
+def retrieve_reminders(user_id: str = "default") -> list:
     """Get upcoming reminders."""
-    db = ReminderDB(user_id=_current_user_id)
+    db = ReminderDB(user_id=user_id)
     return db.get_upcoming()
 
 
-def add_reminder(title: str, message: str, scheduled_time: datetime, metadata: dict = None) -> int:
+def add_reminder(
+    user_id: str = "default",
+    title: str = None,
+    message: str = None,
+    scheduled_time: datetime = None,
+    metadata: dict = None,
+) -> int:
     """Add a reminder and return its ID."""
-    db = ReminderDB(user_id=_current_user_id)
+    db = ReminderDB(user_id=user_id)
     return db.add(title, message, scheduled_time, metadata)
 
 
-def complete_reminder(reminder_id: int) -> None:
+def complete_reminder(user_id: str = "default", reminder_id: int = None) -> None:
     """Mark a reminder as complete."""
-    db = ReminderDB(user_id=_current_user_id)
+    db = ReminderDB(user_id=user_id)
     db.mark_complete(reminder_id)
 
 
-def delete_reminder(reminder_id: int) -> None:
+def delete_reminder(user_id: str = "default", reminder_id: int = None) -> None:
     """Delete a reminder."""
-    db = ReminderDB(user_id=_current_user_id)
+    db = ReminderDB(user_id=user_id)
     db.delete(reminder_id)
 
 RECENT_INTERACTIONS_KEY = "recent_interactions"

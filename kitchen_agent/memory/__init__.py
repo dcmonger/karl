@@ -1,6 +1,5 @@
 """Kitchen Agent memory storage API."""
 from kitchen_agent.memory.api import (
-    set_user_id,
     retrieve_inventory,
     add_inventory_item,
     remove_inventory_item,
@@ -24,7 +23,6 @@ from kitchen_agent.memory.api import (
 )
 
 __all__ = [
-    "set_user_id",
     "retrieve_inventory",
     "add_inventory_item",
     "remove_inventory_item",

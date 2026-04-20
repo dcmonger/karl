@@ -1,6 +1,6 @@
 """search_recipes tool — generates recipe suggestions using configured LLM with current inventory."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import set_user_id, retrieve_inventory, get_working_memory, get_pref_store, get_recipe_store
+from kitchen_agent.memory import retrieve_inventory, get_working_memory, get_pref_store, get_recipe_store
 from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
 
 _pref_store = get_pref_store()
@@ -36,9 +36,8 @@ def search_recipes(
         Recipe suggestions with ingredients, brief instructions, and prep time.
         Also suggests items to add to shopping list if needed.
     """
-    set_user_id(user_id)
     memory = get_working_memory(user_id)
-    inv_items = retrieve_inventory()
+    inv_items = retrieve_inventory(user_id=user_id)
     inv_lines = "\n".join([
         f"- {i['item_name']}: {i['quantity']} {i.get('unit', '')} [{i['location']}]"
         for i in inv_items
