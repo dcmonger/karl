@@ -14,7 +14,8 @@ def init_db():
     c.execute("""
         CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_name TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL DEFAULT 'default',
+            item_name TEXT NOT NULL,
             quantity TEXT NOT NULL,
             unit TEXT,
             location TEXT NOT NULL,
@@ -22,13 +23,15 @@ def init_db():
             acquired_date TEXT NOT NULL,
             expiry_date TEXT,
             metadata TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, item_name)
         )
     """)
-    
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS shopping_list (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL DEFAULT 'default',
             item_name TEXT NOT NULL,
             quantity TEXT,
             unit TEXT,
@@ -73,38 +76,39 @@ def get_connection():
     return conn
 
 class InventoryDB:
-    def __init__(self):
+    def __init__(self, user_id: str = "default"):
         init_db()
-    
+        self.user_id = user_id
+
     def add_item(self, name: str, quantity: str, unit: str = None, location: str = "pantry",
                  category: str = None, expiry_days: int = None, metadata: dict = None):
         conn = get_connection()
         c = conn.cursor()
         acquired = datetime.now().isoformat()
         expiry = (datetime.now() + timedelta(days=expiry_days)).isoformat() if expiry_days else None
-        
+
         c.execute("""
-            INSERT OR REPLACE INTO inventory 
-            (item_name, quantity, unit, location, category, acquired_date, expiry_date, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (name, str(quantity), unit, location, category, acquired, expiry, 
+            INSERT OR REPLACE INTO inventory
+            (user_id, item_name, quantity, unit, location, category, acquired_date, expiry_date, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (self.user_id, name, str(quantity), unit, location, category, acquired, expiry,
               json.dumps(metadata) if metadata else None))
         conn.commit()
         conn.close()
-    
+
     def get_item(self, name: str) -> Optional[dict]:
         conn = get_connection()
         c = conn.cursor()
-        c.execute("SELECT * FROM inventory WHERE item_name = ?", (name,))
+        c.execute("SELECT * FROM inventory WHERE user_id = ? AND item_name = ?", (self.user_id, name))
         row = c.fetchone()
         conn.close()
         return dict(row) if row else None
-    
+
     def get_all_items(self, location: str = None) -> list:
         conn = get_connection()
         c = conn.cursor()
-        query = "SELECT * FROM inventory WHERE 1=1"
-        params = []
+        query = "SELECT * FROM inventory WHERE user_id = ?"
+        params = [self.user_id]
         if location:
             query += " AND location = ?"
             params.append(location)
@@ -112,11 +116,12 @@ class InventoryDB:
         rows = c.fetchall()
         conn.close()
         return [dict(row) for row in rows]
-    
+
     def update_quantity(self, name: str, quantity: str):
         conn = get_connection()
         c = conn.cursor()
-        c.execute("UPDATE inventory SET quantity = ? WHERE item_name = ?", (str(quantity), name))
+        c.execute("UPDATE inventory SET quantity = ? WHERE user_id = ? AND item_name = ?",
+                  (str(quantity), self.user_id, name))
         if c.rowcount == 0:
             conn.rollback()
             conn.close()
@@ -124,80 +129,82 @@ class InventoryDB:
         conn.commit()
         conn.close()
         return True
-    
+
     def delete_item(self, name: str):
         conn = get_connection()
         c = conn.cursor()
-        c.execute("DELETE FROM inventory WHERE item_name = ?", (name,))
+        c.execute("DELETE FROM inventory WHERE user_id = ? AND item_name = ?", (self.user_id, name))
         conn.commit()
         conn.close()
-    
+
     def get_expiring_items(self, days: int = 3) -> list:
         conn = get_connection()
         c = conn.cursor()
         threshold = (datetime.now() + timedelta(days=days)).isoformat()
         c.execute("""
-            SELECT * FROM inventory 
-            WHERE expiry_date IS NOT NULL AND expiry_date <= ?
+            SELECT * FROM inventory
+            WHERE user_id = ? AND expiry_date IS NOT NULL AND expiry_date <= ?
             ORDER BY expiry_date
-        """, (threshold,))
+        """, (self.user_id, threshold))
         rows = c.fetchall()
         conn.close()
         return [dict(row) for row in rows]
 
 class ShoppingListDB:
-    def __init__(self):
+    def __init__(self, user_id: str = "default"):
         init_db()
-    
-    def add(self, item: str, quantity: str = None, unit: str = None, 
+        self.user_id = user_id
+
+    def add(self, item: str, quantity: str = None, unit: str = None,
             reason: str = None, source_recipe: str = None, priority: int = 1):
         conn = get_connection()
         c = conn.cursor()
         c.execute("""
-            INSERT INTO shopping_list (item_name, quantity, unit, reason, source_recipe, priority)
+            INSERT INTO shopping_list (user_id, item_name, quantity, unit, reason, source_recipe, priority)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (item, quantity, unit, reason, source_recipe, priority))
+        """, (self.user_id, item, quantity, unit, reason, source_recipe, priority))
         conn.commit()
         conn.close()
-    
+
     def get_all(self, status: str = None) -> list:
         conn = get_connection()
         c = conn.cursor()
-        query = "SELECT * FROM shopping_list"
-        params = []
+        query = "SELECT * FROM shopping_list WHERE user_id = ?"
+        params = [self.user_id]
         if status:
-            query += " WHERE status = ?"
+            query += " AND status = ?"
             params.append(status)
         query += " ORDER BY priority DESC, created_at"
         c.execute(query, params)
         rows = c.fetchall()
         conn.close()
         return [dict(row) for row in rows]
-    
+
     def update_status(self, item: str, status: str, feedback: str = None):
         conn = get_connection()
         c = conn.cursor()
         if feedback:
             c.execute("""
-                UPDATE shopping_list 
+                UPDATE shopping_list
                 SET status = ?, feedback = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE item_name = ?
-            """, (status, feedback, item))
+                WHERE user_id = ? AND item_name = ?
+            """, (status, feedback, self.user_id, item))
         else:
             c.execute("""
-                UPDATE shopping_list 
+                UPDATE shopping_list
                 SET status = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE item_name = ?
-            """, (status, item))
+                WHERE user_id = ? AND item_name = ?
+            """, (status, self.user_id, item))
         conn.commit()
         conn.close()
-    
+
     def remove(self, item: str):
         conn = get_connection()
         c = conn.cursor()
-        c.execute("DELETE FROM shopping_list WHERE item_name = ?", (item,))
+        c.execute("DELETE FROM shopping_list WHERE user_id = ? AND item_name = ?", (self.user_id, item))
         conn.commit()
         conn.close()
+
 
 class ReminderDB:
     def __init__(self):

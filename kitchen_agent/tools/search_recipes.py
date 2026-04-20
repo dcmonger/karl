@@ -5,7 +5,6 @@ from kitchen_agent.storage.vector_store import PreferenceStore, RecipeHistorySto
 from kitchen_agent.storage.memory import get_working_memory
 from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
 
-_inventory_db = InventoryDB()
 _pref_store = PreferenceStore()
 _recipe_store = RecipeHistoryStore()
 
@@ -40,19 +39,26 @@ def search_recipes(
         Also suggests items to add to shopping list if needed.
     """
     memory = get_working_memory(user_id)
+    inventory_db = InventoryDB(user_id=user_id)
+    inv_items = inventory_db.get_all_items()
+    inv_lines = "\n".join([
+        f"- {i['item_name']}: {i['quantity']} {i.get('unit', '')} [{i['location']}]"
+        for i in inv_items
+    ]) if inv_items else "(empty)"
+
     prefs = _pref_store.search_preferences(user_id, query or "food preferences", limit=5)
     pref_lines = "\n".join([
         f"- {p.get('entity')}: {p.get('value')} ({p.get('type')})"
         for p in prefs
     ]) if prefs else "(no strong preferences recorded yet)"
-    
+
     recent_raw = _recipe_store.get_recent_recipes(user_id, limit=5)
     recent_lines = "\n".join([f"- {r.get('recipe_name')}" for r in recent_raw if r.get('recipe_name')]) or "(none recorded)"
-    
+
     prompt = f"""The user wants recipe suggestions.
 
 CURRENT INVENTORY:
-{memory['inventory']}
+{inv_lines}
 
 RECENTLY MADE DISHES:
 {recent_lines}
