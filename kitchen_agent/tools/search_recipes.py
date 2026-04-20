@@ -3,9 +3,27 @@ from langchain_core.tools import tool
 from kitchen_agent.memory import get_profile, get_working_memory
 from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
 
-from kitchen_agent.agents.kitchen_agent import _get_llm
+def _get_llm():
+    from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
+    if LLM_PROVIDER == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GEMINI_KEY, temperature=0.7)
+    elif LLM_PROVIDER == "openai":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=MODEL_NAME, temperature=0.7)
+    else:
+        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER}")
 
-_llm = _get_llm()
+
+_llm = None
+
+
+def _get_llm_instance():
+    global _llm
+    if _llm is None:
+        _llm = _get_llm()
+    return _llm
+
 
 SYSTEM_INSTRUCTION = """You are a friendly, practical kitchen assistant. You help users figure out what to cook with what they have, suggest new dishes, and inspire them to eat well. Be concise, enthusiastic, and practical. When suggesting recipes, include rough prep time, cook time, and key ingredients. If inventory is limited, suggest simple flexible recipes. If you recommend a recipe that needs marinating or advance prep, mention it. You know the user's preferences and inventory — respect their likes, dislikes, and dietary needs. Never suggest a recipe that uses ingredients they dislike or are allergic to. Keep responses conversational but informative."""
 
@@ -34,7 +52,7 @@ def search_recipes(
         Also suggests items to add to shopping list if needed.
     """
     profile = get_profile(user_id)
-    memory = get_working_memory(user_id)
+    memory = profile.get_working_memory()
     inv_items = profile.retrieve_inventory()
     inv_lines = "\n".join([
         f"- {i['item_name']}: {i['quantity']} {i.get('unit', '')} [{i['location']}]"
@@ -77,7 +95,7 @@ Also note any items that are running low or expiring soon that should be used.
 Keep it conversational and encouraging. Max {limit} suggestions."""
     
     try:
-        result = _llm.invoke(prompt)
+        result = _get_llm_instance().invoke(prompt)
         return result.content if hasattr(result, 'content') else str(result)
     except Exception as e:
         return f"Sorry, I had trouble generating recipes right now: {e}"

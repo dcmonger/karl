@@ -1,13 +1,13 @@
-"""update_reminder tool — manage reminders (add, list, delete, complete)."""
+"""manage_reminder tool — manage reminders (add, list, cancel, complete)."""
 import requests
 from langchain_core.tools import tool
+from datetime import datetime
 from kitchen_agent.memory import get_profile
 from kitchen_agent.config.settings import REMINDER_DAEMON_URL
-from datetime import datetime
 
 
 @tool
-def update_reminder(
+def manage_reminder(
     action: str,
     title: str = None,
     message: str = None,
@@ -16,7 +16,7 @@ def update_reminder(
     user_id: str = "default",
     metadata: dict = None,
 ) -> str:
-    """Manage reminders — add, list, delete, or mark complete.
+    """Manage reminders — add, list, cancel, or mark complete.
 
     Actions:
     - "add": Schedule a new reminder.
