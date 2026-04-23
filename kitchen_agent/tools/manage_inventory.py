@@ -3,6 +3,12 @@ from langchain_core.tools import tool
 from datetime import datetime
 from kitchen_agent.memory import get_profile
 
+def _to_float(value: str) -> float | None:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
 
 @tool
 def manage_inventory(
@@ -11,7 +17,7 @@ def manage_inventory(
     quantity: str = None,
     user_id: str = "default",
     unit: str = None,
-    location: str = "pantry",
+    location: str = None,
     category: str = None,
     expiry_days: int = None,
 ) -> str:
@@ -30,7 +36,7 @@ def manage_inventory(
         quantity: Amount. For add or consume.
         user_id: User identifier.
         unit: Unit (e.g., "lbs", "oz"). For add.
-        location: Where stored. For add. Default "pantry".
+        location: Where stored. Optional for list; defaults to "pantry" for add.
         category: Category (e.g., "produce", "dairy"). For add.
         expiry_days: Days until expiry. For add.
 
@@ -79,13 +85,13 @@ def manage_inventory(
             name=item_name,
             quantity=quantity or "1",
             unit=unit,
-            location=location,
+            location=location or "pantry",
             category=category,
             expiry_days=expiry_days,
         )
         action_str = "Updated" if existing else "Added"
         unit_str = f" {unit}" if unit else ""
-        return f"{action_str} inventory: {item_name} = {quantity or '1'}{unit_str} in {location}."
+        return f"{action_str} inventory: {item_name} = {quantity or '1'}{unit_str} in {location or 'pantry'}."
 
     elif action == "check":
         item = profile.get_inventory_item(item_name)
@@ -112,10 +118,26 @@ def manage_inventory(
         if quantity is None:
             profile.remove_inventory_item(item_name)
             return f"Used up {item_name}, removed from inventory."
-        profile.update_inventory_quantity(item_name, quantity)
+
+        current_qty = _to_float(existing.get("quantity"))
+        consume_qty = _to_float(quantity)
+        if current_qty is None or consume_qty is None:
+            return (
+                f"Couldn't consume '{item_name}' by amount because quantity is non-numeric "
+                f"(current='{existing.get('quantity')}', requested='{quantity}'). "
+                "Use consume with no quantity to remove, or set an explicit quantity via add."
+            )
+
+        remaining = current_qty - consume_qty
+        if remaining <= 0:
+            profile.remove_inventory_item(item_name)
+            return f"Used up {item_name}, removed from inventory."
+
+        remaining_str = str(int(remaining)) if remaining.is_integer() else str(round(remaining, 3))
+        profile.update_inventory_quantity(item_name, remaining_str)
         unit = existing.get("unit")
         unit_str = f" {unit}" if unit else ""
-        return f"Updated {item_name} remaining to {quantity}{unit_str}."
+        return f"Updated {item_name} remaining to {remaining_str}{unit_str}."
 
     elif action == "remove":
         profile.remove_inventory_item(item_name)

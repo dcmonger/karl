@@ -177,3 +177,7 @@ def get_profile(user_id: str = "default") -> Profile:
 def get_working_memory(user_id: str = "default") -> dict:
     """Get working memory context for the given user_id."""
     return get_profile(user_id).get_working_memory()
+
+def get_reminder_db(user_id: str = "default") -> ReminderDB:
+    """Get a ReminderDB instance for the given user_id."""
+    return ReminderDB(user_id=user_id)

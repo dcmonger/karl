@@ -54,8 +54,9 @@ def manage_reminder(
             metadata=metadata,
         )
 
+        daemon_error = None
         try:
-            requests.post(
+            resp = requests.post(
                 f"{REMINDER_DAEMON_URL}/schedule",
                 json={
                     "reminder_id": reminder_id,
@@ -66,14 +67,21 @@ def manage_reminder(
                 },
                 timeout=10,
             )
-        except requests.RequestException:
-            pass
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            daemon_error = str(exc)
 
-        return (
+        msg = (
             f"Reminder scheduled: '{title}'\n"
             f"Message: {message}\n"
             f"Will fire at: {parsed_time.strftime('%b %d at %H:%M')}"
         )
+        if daemon_error:
+            msg += (
+                "\n⚠️ Saved in database, but reminder daemon sync failed. "
+                f"Error: {daemon_error}"
+            )
+        return msg
 
     elif action == "list":
         reminders = profile.retrieve_reminders()
@@ -89,14 +97,23 @@ def manage_reminder(
         if not reminder_id:
             return "cancel requires reminder_id."
         profile.delete_reminder(reminder_id)
+        daemon_error = None
         try:
-            requests.delete(
+            resp = requests.delete(
                 f"{REMINDER_DAEMON_URL}/schedule/{reminder_id}",
                 timeout=10,
             )
-        except requests.RequestException:
-            pass
-        return f"Cancelled reminder {reminder_id}."
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            daemon_error = str(exc)
+
+        msg = f"Cancelled reminder {reminder_id}."
+        if daemon_error:
+            msg += (
+                " ⚠️ Database updated, but daemon cancellation sync failed. "
+                f"Error: {daemon_error}"
+            )
+        return msg
 
     elif action == "complete":
         if not reminder_id:

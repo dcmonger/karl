@@ -8,10 +8,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import httpx
 from fastapi import FastAPI, Request, Response
-from pydantic import BaseModel
 import uvicorn
 
-from kitchen_agent.config.settings import TELEGRAM_TOKEN, AGENT_BASE_URL
+from kitchen_agent.config.settings import TELEGRAM_TOKEN, AGENT_BASE_URL, validate_runtime_env
 from kitchen_agent.agents.kitchen_agent import KitchenAgent
 
 logging.basicConfig(level=logging.INFO)
@@ -156,6 +155,8 @@ async def polling_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_runtime_env(service="agent")
+
     if USE_WEBHOOK:
         webhook_url = f"{AGENT_BASE_URL}{WEBHOOK_PATH}"
         logger.info(f"Setting webhook to {webhook_url}")

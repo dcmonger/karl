@@ -10,9 +10,9 @@ Karl is a FastAPI-based kitchen assistant that can:
 ## Project structure
 
 - `kitchen_agent/messenger.py` — messenger service for Telegram transport + chat endpoint handling.
-- `kitchen_agent/api/routes.py` — API routes for chat, inventory, shopping, and memory maintenance.
+- `kitchen_agent/agents/kitchen_agent.py` — LangChain agent setup, prompt, and tool orchestration.
 - `kitchen_agent/scheduler/reminder_daemon.py` — reminder daemon service.
-- `kitchen_agent/storage/` — database, memory, and vector store helpers.
+- `kitchen_agent/memory/` — SQLite + Chroma-backed memory/storage helpers.
 - `docker-compose.yml` — local multi-service setup.
 - `run_local.sh` — convenience script for local development startup.
 
@@ -36,6 +36,13 @@ Karl is a FastAPI-based kitchen assistant that can:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r kitchen_agent/requirements.txt
+```
+
+### 1.1) Initialize database schema (Alembic)
+
+```bash
+# Uses DB_PATH from env (or default kitchen_agent/storage/kitchen.db)
+alembic upgrade head
 ```
 
 ### 2) Configure environment variables
@@ -112,30 +119,59 @@ Services:
 
 ## API quickstart
 
-Health check:
+The primary interaction model is **Telegram-first** (polling or webhook).
+The HTTP app mostly exposes service/transport endpoints.
+
+### Exposed HTTP routes
+
+| Service | Method | Path | Purpose |
+|---|---|---|---|
+| messenger | GET | `/` | basic service identity |
+| messenger | GET | `/health` | liveness + mode |
+| messenger | POST | `/telegram/webhook` | Telegram webhook receiver |
+| reminder-daemon | GET | `/health` | daemon liveness |
+| reminder-daemon | POST | `/schedule` | schedule reminder jobs |
+| reminder-daemon | DELETE | `/schedule/{reminder_id}` | cancel a scheduled job |
+| reminder-daemon | GET | `/schedules` | inspect in-memory scheduler jobs |
+
+Health check (messenger):
 
 ```bash
 curl http://localhost:8000/health
 ```
 
-Chat endpoint:
+Root endpoint:
 
 ```bash
-curl -X POST http://localhost:8000/chat \
+curl http://localhost:8000/
+```
+
+Telegram webhook endpoint (used only when `USE_WEBHOOK=true`):
+
+```bash
+curl -X POST http://localhost:8000/telegram/webhook \
   -H "Content-Type: application/json" \
-  -d '{"chat_id":"demo","message":"What can I cook with rice and eggs?"}'
+  -d "{\"update_id\":1,\"message\":{\"chat\":{\"id\":123},\"from\":{\"id\":123},\"text\":\"hi\"}}"
 ```
 
-Inventory list:
+## Runtime limits & concurrency notes
+
+- This project uses SQLite for structured state and APScheduler in-memory jobs for reminder execution.
+- It is best suited for **single-process, low-concurrency** workloads (typical personal bot usage).
+- Recommended envelope: one app instance per service, small concurrent request volume, and no heavy parallel writes.
+- If you scale to multiple instances, reminder schedules in the daemon are not shared because job storage is in-memory.
+- For higher concurrency/HA, move to a shared database and persistent scheduler backend.
+
+## Database stack
+
+- Structured data uses **SQLAlchemy ORM** (SQLite by default).
+- Schema migrations are managed with **Alembic** (`alembic/`).
+- Useful commands:
 
 ```bash
-curl http://localhost:8000/inventory
-```
-
-Shopping list:
-
-```bash
-curl http://localhost:8000/shopping
+alembic upgrade head
+alembic downgrade -1
+alembic revision -m "describe change"
 ```
 
 ## Telegram modes
@@ -160,5 +196,5 @@ The agent now has explicit write tools for inventory changes:
 Conversation replay uses a bounded window (message count + character cap) so prompts stay efficient as history grows.
 
 
-- `update_inventory(...)` for restocks/additions (e.g. “I bought eggs”).
-- `consume_inventory(...)` for consumption/use-up actions (e.g. “I used the last garlic”).
+- `manage_inventory(action="add", ...)` for restocks/additions (e.g. “I bought eggs”).
+- `manage_inventory(action="consume", ...)` for consumption/use-up actions (e.g. “I used the last garlic”).
