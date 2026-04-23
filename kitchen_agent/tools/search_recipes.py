@@ -1,7 +1,6 @@
 """search_recipes tool — generates recipe suggestions using configured LLM with current inventory."""
 from langchain_core.tools import tool
-from kitchen_agent.memory import get_profile, get_working_memory
-from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
+from kitchen_agent.memory import get_profile
 
 def _get_llm():
     from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
@@ -52,7 +51,6 @@ def search_recipes(
         Also suggests items to add to shopping list if needed.
     """
     profile = get_profile(user_id)
-    memory = profile.get_working_memory()
     inv_items = profile.retrieve_inventory()
     inv_lines = "\n".join([
         f"- {i['item_name']}: {i['quantity']} {i.get('unit', '')} [{i['location']}]"

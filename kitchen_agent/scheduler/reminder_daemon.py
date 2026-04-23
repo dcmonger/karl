@@ -13,6 +13,7 @@ from pydantic import BaseModel
 import uvicorn
 import requests
 
+from kitchen_agent.config.settings import validate_runtime_env
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ def start_scheduler():
 
 @app.on_event("startup")
 async def startup():
+    validate_runtime_env(service="reminder")
     start_scheduler()
 
 

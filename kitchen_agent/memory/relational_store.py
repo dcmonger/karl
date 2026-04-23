@@ -1,79 +1,117 @@
-"""SQLite database schema for structured data."""
+"""SQLAlchemy models + repositories for structured data."""
+import json
 import os
-import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Optional
-import json
+
+from sqlalchemy import Column, Integer, String, Text, create_engine, select
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_PATH = os.getenv("DB_PATH", "kitchen_agent/storage/kitchen.db")
 
+
+def _ensure_parent_dir() -> None:
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+
+def _db_url() -> str:
+    if DB_PATH.startswith("sqlite://"):
+        return DB_PATH
+    return f"sqlite:///{DB_PATH}"
+
+
+Base = declarative_base()
+
+
+class Inventory(Base):
+    __tablename__ = "inventory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, default="default", index=True)
+    item_name = Column(String, nullable=False)
+    quantity = Column(String, nullable=False)
+    unit = Column(String, nullable=True)
+    location = Column(String, nullable=False)
+    category = Column(String, nullable=True)
+    acquired_date = Column(String, nullable=False)
+    expiry_date = Column(String, nullable=True)
+    metadata_json = Column("metadata", Text, nullable=True)
+    created_at = Column(String, default=lambda: datetime.now().isoformat())
+
+
+class ShoppingList(Base):
+    __tablename__ = "shopping_list"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, default="default", index=True)
+    item_name = Column(String, nullable=False)
+    quantity = Column(String, nullable=True)
+    unit = Column(String, nullable=True)
+    priority = Column(Integer, default=1)
+    reason = Column(String, nullable=True)
+    source_recipe = Column(String, nullable=True)
+    status = Column(String, default="pending", index=True)
+    feedback = Column(String, nullable=True)
+    created_at = Column(String, default=lambda: datetime.now().isoformat())
+    updated_at = Column(String, default=lambda: datetime.now().isoformat())
+
+
+class Reminder(Base):
+    __tablename__ = "reminders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    scheduled_time = Column(String, nullable=False, index=True)
+    status = Column(String, default="pending", index=True)
+    user_id = Column(String, nullable=True, index=True)
+    metadata_json = Column("metadata", Text, nullable=True)
+    created_at = Column(String, default=lambda: datetime.now().isoformat())
+
+
+class AgentMemory(Base):
+    __tablename__ = "agent_memory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String, unique=True, nullable=False, index=True)
+    value = Column(Text, nullable=False)
+    updated_at = Column(String, default=lambda: datetime.now().isoformat())
+
+
+_engine = None
+_SessionLocal = None
+
+
+def _get_engine():
+    global _engine, _SessionLocal
+    if _engine is None:
+        _ensure_parent_dir()
+        _engine = create_engine(_db_url(), future=True)
+        _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False, future=True)
+    return _engine
+
+
+@contextmanager
+def get_session():
+    _get_engine()
+    session = _SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS inventory (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL DEFAULT 'default',
-            item_name TEXT NOT NULL,
-            quantity TEXT NOT NULL,
-            unit TEXT,
-            location TEXT NOT NULL,
-            category TEXT,
-            acquired_date TEXT NOT NULL,
-            expiry_date TEXT,
-            metadata TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, item_name)
-        )
-    """)
+    engine = _get_engine()
+    Base.metadata.create_all(bind=engine)
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS shopping_list (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL DEFAULT 'default',
-            item_name TEXT NOT NULL,
-            quantity TEXT,
-            unit TEXT,
-            priority INTEGER DEFAULT 1,
-            reason TEXT,
-            source_recipe TEXT,
-            status TEXT DEFAULT 'pending',
-            feedback TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS reminders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            message TEXT NOT NULL,
-            scheduled_time TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            user_id TEXT,
-            metadata TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS agent_memory (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            key TEXT UNIQUE NOT NULL,
-            value TEXT NOT NULL,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
-
-def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 class InventoryDB:
     def __init__(self, user_id: str = "default"):
@@ -82,73 +120,68 @@ class InventoryDB:
 
     def add_item(self, name: str, quantity: str, unit: str = None, location: str = "pantry",
                  category: str = None, expiry_days: int = None, metadata: dict = None):
-        conn = get_connection()
-        c = conn.cursor()
         acquired = datetime.now().isoformat()
         expiry = (datetime.now() + timedelta(days=expiry_days)).isoformat() if expiry_days else None
-
-        c.execute("""
-            INSERT OR REPLACE INTO inventory
-            (user_id, item_name, quantity, unit, location, category, acquired_date, expiry_date, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (self.user_id, name, str(quantity), unit, location, category, acquired, expiry,
-              json.dumps(metadata) if metadata else None))
-        conn.commit()
-        conn.close()
+        with get_session() as s:
+            row = s.execute(
+                select(Inventory).where(Inventory.user_id == self.user_id, Inventory.item_name == name)
+            ).scalar_one_or_none()
+            if row is None:
+                row = Inventory(user_id=self.user_id, item_name=name, location=location, acquired_date=acquired)
+                s.add(row)
+            row.quantity = str(quantity)
+            row.unit = unit
+            row.location = location
+            row.category = category
+            row.acquired_date = acquired
+            row.expiry_date = expiry
+            row.metadata_json = json.dumps(metadata) if metadata else None
 
     def get_item(self, name: str) -> Optional[dict]:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("SELECT * FROM inventory WHERE user_id = ? AND item_name = ?", (self.user_id, name))
-        row = c.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        with get_session() as s:
+            row = s.execute(
+                select(Inventory).where(Inventory.user_id == self.user_id, Inventory.item_name == name)
+            ).scalar_one_or_none()
+            return _to_dict(row)
 
     def get_all_items(self, location: str = None) -> list:
-        conn = get_connection()
-        c = conn.cursor()
-        query = "SELECT * FROM inventory WHERE user_id = ?"
-        params = [self.user_id]
-        if location:
-            query += " AND location = ?"
-            params.append(location)
-        c.execute(query, params)
-        rows = c.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with get_session() as s:
+            stmt = select(Inventory).where(Inventory.user_id == self.user_id)
+            if location:
+                stmt = stmt.where(Inventory.location == location)
+            rows = s.execute(stmt).scalars().all()
+            return [_to_dict(r) for r in rows]
 
     def update_quantity(self, name: str, quantity: str):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("UPDATE inventory SET quantity = ? WHERE user_id = ? AND item_name = ?",
-                  (str(quantity), self.user_id, name))
-        if c.rowcount == 0:
-            conn.rollback()
-            conn.close()
-            return False
-        conn.commit()
-        conn.close()
-        return True
+        with get_session() as s:
+            row = s.execute(
+                select(Inventory).where(Inventory.user_id == self.user_id, Inventory.item_name == name)
+            ).scalar_one_or_none()
+            if row is None:
+                return False
+            row.quantity = str(quantity)
+            return True
 
     def delete_item(self, name: str):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("DELETE FROM inventory WHERE user_id = ? AND item_name = ?", (self.user_id, name))
-        conn.commit()
-        conn.close()
+        with get_session() as s:
+            row = s.execute(
+                select(Inventory).where(Inventory.user_id == self.user_id, Inventory.item_name == name)
+            ).scalar_one_or_none()
+            if row:
+                s.delete(row)
 
     def get_expiring_items(self, days: int = 3) -> list:
-        conn = get_connection()
-        c = conn.cursor()
         threshold = (datetime.now() + timedelta(days=days)).isoformat()
-        c.execute("""
-            SELECT * FROM inventory
-            WHERE user_id = ? AND expiry_date IS NOT NULL AND expiry_date <= ?
-            ORDER BY expiry_date
-        """, (self.user_id, threshold))
-        rows = c.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with get_session() as s:
+            rows = s.execute(
+                select(Inventory).where(
+                    Inventory.user_id == self.user_id,
+                    Inventory.expiry_date.is_not(None),
+                    Inventory.expiry_date <= threshold,
+                ).order_by(Inventory.expiry_date)
+            ).scalars().all()
+            return [_to_dict(r) for r in rows]
+
 
 class ShoppingListDB:
     def __init__(self, user_id: str = "default"):
@@ -157,53 +190,43 @@ class ShoppingListDB:
 
     def add(self, item: str, quantity: str = None, unit: str = None,
             reason: str = None, source_recipe: str = None, priority: int = 1):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO shopping_list (user_id, item_name, quantity, unit, reason, source_recipe, priority)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (self.user_id, item, quantity, unit, reason, source_recipe, priority))
-        conn.commit()
-        conn.close()
+        with get_session() as s:
+            s.add(ShoppingList(
+                user_id=self.user_id,
+                item_name=item,
+                quantity=quantity,
+                unit=unit,
+                reason=reason,
+                source_recipe=source_recipe,
+                priority=priority,
+            ))
 
     def get_all(self, status: str = None) -> list:
-        conn = get_connection()
-        c = conn.cursor()
-        query = "SELECT * FROM shopping_list WHERE user_id = ?"
-        params = [self.user_id]
-        if status:
-            query += " AND status = ?"
-            params.append(status)
-        query += " ORDER BY priority DESC, created_at"
-        c.execute(query, params)
-        rows = c.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with get_session() as s:
+            stmt = select(ShoppingList).where(ShoppingList.user_id == self.user_id)
+            if status:
+                stmt = stmt.where(ShoppingList.status == status)
+            rows = s.execute(stmt.order_by(ShoppingList.priority.desc(), ShoppingList.created_at)).scalars().all()
+            return [_to_dict(r) for r in rows]
 
     def update_status(self, item: str, status: str, feedback: str = None):
-        conn = get_connection()
-        c = conn.cursor()
-        if feedback:
-            c.execute("""
-                UPDATE shopping_list
-                SET status = ?, feedback = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ? AND item_name = ?
-            """, (status, feedback, self.user_id, item))
-        else:
-            c.execute("""
-                UPDATE shopping_list
-                SET status = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ? AND item_name = ?
-            """, (status, self.user_id, item))
-        conn.commit()
-        conn.close()
+        with get_session() as s:
+            rows = s.execute(
+                select(ShoppingList).where(ShoppingList.user_id == self.user_id, ShoppingList.item_name == item)
+            ).scalars().all()
+            for row in rows:
+                row.status = status
+                if feedback is not None:
+                    row.feedback = feedback
+                row.updated_at = datetime.now().isoformat()
 
     def remove(self, item: str):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("DELETE FROM shopping_list WHERE user_id = ? AND item_name = ?", (self.user_id, item))
-        conn.commit()
-        conn.close()
+        with get_session() as s:
+            rows = s.execute(
+                select(ShoppingList).where(ShoppingList.user_id == self.user_id, ShoppingList.item_name == item)
+            ).scalars().all()
+            for row in rows:
+                s.delete(row)
 
 
 class ReminderDB:
@@ -213,92 +236,100 @@ class ReminderDB:
 
     def add(self, title: str, message: str, scheduled_time: datetime,
             metadata: dict = None):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO reminders (title, message, scheduled_time, user_id, metadata)
-            VALUES (?, ?, ?, ?, ?)
-        """, (title, message, scheduled_time.isoformat(), self.user_id,
-              json.dumps(metadata) if metadata else None))
-        conn.commit()
-        last_id = c.lastrowid
-        conn.close()
-        return last_id
+        with get_session() as s:
+            row = Reminder(
+                title=title,
+                message=message,
+                scheduled_time=scheduled_time.isoformat(),
+                user_id=self.user_id,
+                metadata_json=json.dumps(metadata) if metadata else None,
+            )
+            s.add(row)
+            s.flush()
+            return row.id
 
     def get_due(self) -> list:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("""
-            SELECT * FROM reminders
-            WHERE user_id = ? AND status = 'pending' AND scheduled_time <= ?
-            ORDER BY scheduled_time
-        """, (self.user_id, datetime.now().isoformat()))
-        rows = c.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        now = datetime.now().isoformat()
+        with get_session() as s:
+            rows = s.execute(
+                select(Reminder).where(
+                    Reminder.user_id == self.user_id,
+                    Reminder.status == "pending",
+                    Reminder.scheduled_time <= now,
+                ).order_by(Reminder.scheduled_time)
+            ).scalars().all()
+            return [_to_dict(r) for r in rows]
 
     def get_by_id(self, id: int) -> Optional[dict]:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("SELECT * FROM reminders WHERE user_id = ? AND id = ?", (self.user_id, id))
-        row = c.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        with get_session() as s:
+            row = s.execute(
+                select(Reminder).where(Reminder.user_id == self.user_id, Reminder.id == id)
+            ).scalar_one_or_none()
+            return _to_dict(row)
 
     def get_upcoming(self, limit: int = 10) -> list:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("""
-            SELECT * FROM reminders
-            WHERE user_id = ? AND status = 'pending' AND scheduled_time > ?
-            ORDER BY scheduled_time
-            LIMIT ?
-        """, (self.user_id, datetime.now().isoformat(), limit))
-        rows = c.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        now = datetime.now().isoformat()
+        with get_session() as s:
+            rows = s.execute(
+                select(Reminder).where(
+                    Reminder.user_id == self.user_id,
+                    Reminder.status == "pending",
+                    Reminder.scheduled_time > now,
+                ).order_by(Reminder.scheduled_time).limit(limit)
+            ).scalars().all()
+            return [_to_dict(r) for r in rows]
 
     def get_all(self) -> list:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("SELECT * FROM reminders WHERE user_id = ? ORDER BY scheduled_time", (self.user_id,))
-        rows = c.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with get_session() as s:
+            rows = s.execute(
+                select(Reminder).where(Reminder.user_id == self.user_id).order_by(Reminder.scheduled_time)
+            ).scalars().all()
+            return [_to_dict(r) for r in rows]
 
     def mark_complete(self, id: int):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("UPDATE reminders SET status = 'completed' WHERE user_id = ? AND id = ?",
-                  (self.user_id, id))
-        conn.commit()
-        conn.close()
+        with get_session() as s:
+            row = s.execute(
+                select(Reminder).where(Reminder.user_id == self.user_id, Reminder.id == id)
+            ).scalar_one_or_none()
+            if row:
+                row.status = "completed"
 
     def delete(self, id: int):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("DELETE FROM reminders WHERE user_id = ? AND id = ?", (self.user_id, id))
-        conn.commit()
-        conn.close()
+        with get_session() as s:
+            row = s.execute(
+                select(Reminder).where(Reminder.user_id == self.user_id, Reminder.id == id)
+            ).scalar_one_or_none()
+            if row:
+                s.delete(row)
+
 
 class ConversationDB:
     def __init__(self):
         init_db()
-    
+
     def set(self, key: str, value: dict):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("""
-            INSERT OR REPLACE INTO agent_memory (key, value, updated_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        """, (key, json.dumps(value)))
-        conn.commit()
-        conn.close()
-    
+        with get_session() as s:
+            row = s.execute(select(AgentMemory).where(AgentMemory.key == key)).scalar_one_or_none()
+            if row is None:
+                row = AgentMemory(key=key, value=json.dumps(value), updated_at=datetime.now().isoformat())
+                s.add(row)
+            else:
+                row.value = json.dumps(value)
+                row.updated_at = datetime.now().isoformat()
+
     def get(self, key: str) -> Optional[dict]:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("SELECT value FROM agent_memory WHERE key = ?", (key,))
-        row = c.fetchone()
-        conn.close()
-        return json.loads(row['value']) if row else None
+        with get_session() as s:
+            row = s.execute(select(AgentMemory).where(AgentMemory.key == key)).scalar_one_or_none()
+            return json.loads(row.value) if row else None
+
+
+def _to_dict(row):
+    if row is None:
+        return None
+    data = {}
+    for col in row.__table__.columns:
+        if col.name == "metadata":
+            data[col.name] = getattr(row, "metadata_json")
+        else:
+            data[col.name] = getattr(row, col.name)
+    return data

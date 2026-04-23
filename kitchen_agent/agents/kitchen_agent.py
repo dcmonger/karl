@@ -110,8 +110,6 @@ class KitchenAgent:
         uid = user_id or self.user_id
         profile = get_profile(uid)
 
-        profile.append_interaction("user", user_message)
-
         prior_messages = []
         for msg in profile.get_conversation_history(limit=8, max_chars=3000):
             if msg.get("role") == "user":
@@ -126,7 +124,6 @@ class KitchenAgent:
         last_msg = result["messages"][-1]
         response = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
-        profile.append_interaction("assistant", response)
         profile.append_message("user", user_message)
         profile.append_message("assistant", response)
         return response
