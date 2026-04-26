@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from langchain_core.runnables import Runnable
 from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from kitchen_agent.tools import TOOLS
@@ -113,6 +114,13 @@ class KitchenAgent:
         self.llm = _get_llm()
         
         self.tools = TOOLS
+        self.middleware = [
+            SummarizationMiddleware(
+                model=self.llm,
+                trigger=("messages", 40),
+                keep=("messages", 20),
+            )
+        ]
         
         agent_tools = [*self.tools]
         
@@ -120,6 +128,7 @@ class KitchenAgent:
             model=self.llm,
             tools=agent_tools,
             system_prompt=_build_system_prompt(user_id),
+            middleware=self.middleware,
             checkpointer=_get_checkpointer(),
         )
     
