@@ -18,6 +18,7 @@ from kitchen_agent.config.settings import (
     MODEL_NAME,
     GEMINI_KEY,
     LANGGRAPH_CHECKPOINT_DB_PATH,
+    ENABLE_TOOLING_ESCALATION_MESSAGES,
 )
 
 _exit_stack = ExitStack()
@@ -58,6 +59,12 @@ def _get_llm() -> Runnable:
 def _build_system_prompt(user_id: str) -> str:
     profile = get_profile(user_id)
     memory = profile.get_working_memory()
+
+    escalation_guidance = ""
+    if ENABLE_TOOLING_ESCALATION_MESSAGES:
+        escalation_guidance = """
+- If the available tools are broken, insufficient, or behaving unexpectedly for the user's request,
+  clearly tell the user this and briefly explain what is blocked so a developer can fix it."""
 
     prompt = f"""You are Karl — a friendly, practical kitchen manager and cooking assistant.
 
@@ -102,6 +109,7 @@ def _build_system_prompt(user_id: str) -> str:
 - When asked "should I buy X", use manage_inventory(action="check", ...) to check stock first
 - When the user says they cooked something, ask for feedback and log it
 - If the user says "too expensive" or "can't find" about a shopping item, log that feedback
+{escalation_guidance}
 
 Be helpful, proactive, and concise. Aim to make the user's cooking life easier and more enjoyable."""
     return prompt
