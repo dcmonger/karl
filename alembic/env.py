@@ -1,7 +1,11 @@
 from __future__ import with_statement
 
-from logging.config import fileConfig
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 from alembic import context
@@ -14,7 +18,11 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Allow DB_PATH override via env for local/dev/CI
-_db_path = os.getenv("DB_PATH", "kitchen_agent/storage/kitchen.db")
+_db_path = os.getenv("DB_PATH", "kitchen_agent/memory/kitchen.db")
+# Convert to absolute path relative to project root (alembic folder's parent)
+if not os.path.isabs(_db_path):
+    _db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), _db_path)
+
 config.set_main_option("sqlalchemy.url", f"sqlite:///{_db_path}")
 
 target_metadata = Base.metadata

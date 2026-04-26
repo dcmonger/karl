@@ -2,14 +2,20 @@
 import os
 import sys
 import asyncio
-from contextlib import ExitStack
+import aiosqlite
+
+def _patch_aiosqlite():
+    if not hasattr(aiosqlite.Connection, "is_alive"):
+        aiosqlite.Connection.is_alive = lambda self: True
+
+_patch_aiosqlite()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import Runnable
 from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware
-from langgraph.checkpoint.sqlite import SqliteSaver
 
 from kitchen_agent.tools import TOOLS
 from kitchen_agent.memory import get_profile
@@ -21,19 +27,22 @@ from kitchen_agent.config.settings import (
     ENABLE_TOOLING_ESCALATION_MESSAGES,
 )
 
-_exit_stack = ExitStack()
-_checkpointer: SqliteSaver | None = None
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+_checkpointer: AsyncSqliteSaver | None = None
+_checkpointer_lock = asyncio.Lock()
 
 
-def _get_checkpointer() -> SqliteSaver:
+async def _get_checkpointer() -> AsyncSqliteSaver:
     global _checkpointer
     if _checkpointer is None:
-        parent_dir = os.path.dirname(LANGGRAPH_CHECKPOINT_DB_PATH)
-        if parent_dir:
-            os.makedirs(parent_dir, exist_ok=True)
-        _checkpointer = _exit_stack.enter_context(
-            SqliteSaver.from_conn_string(LANGGRAPH_CHECKPOINT_DB_PATH)
-        )
+        async with _checkpointer_lock:
+            if _checkpointer is None:
+                parent_dir = os.path.dirname(LANGGRAPH_CHECKPOINT_DB_PATH)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
+                checkpointer_cm = AsyncSqliteSaver.from_conn_string(LANGGRAPH_CHECKPOINT_DB_PATH)
+                _checkpointer = await checkpointer_cm.__aenter__()
     return _checkpointer
 
 
@@ -118,6 +127,8 @@ Be helpful, proactive, and concise. Aim to make the user's cooking life easier a
 class KitchenAgent:
     def __init__(self, user_id: str = "default"):
         self.user_id = user_id
+        self._checkpointer = None
+        self._graph_initialized = False
         
         self.llm = _get_llm()
         
@@ -131,14 +142,19 @@ class KitchenAgent:
         ]
         
         agent_tools = [*self.tools]
-        
-        self.graph = create_agent(
-            model=self.llm,
-            tools=agent_tools,
-            system_prompt=_build_system_prompt(user_id),
-            middleware=self.middleware,
-            checkpointer=_get_checkpointer(),
-        )
+
+    async def _ensure_graph(self):
+        if not self._graph_initialized:
+            if self._checkpointer is None:
+                self._checkpointer = await _get_checkpointer()
+            self.graph = create_agent(
+                model=self.llm,
+                tools=agent_tools,
+                system_prompt=_build_system_prompt(self.user_id),
+                middleware=self.middleware,
+                checkpointer=self._checkpointer,
+            )
+            self._graph_initialized = True
     
     def run(self, user_message: str, user_id: str = None) -> str:
         """Synchronous wrapper for backward compatibility."""
@@ -146,6 +162,7 @@ class KitchenAgent:
     
     async def run_async(self, user_message: str, user_id: str = None) -> str:
         """Run the agent asynchronously using ainvoke."""
+        await self._ensure_graph()
         uid = user_id or self.user_id
 
         result = await self.graph.ainvoke(
