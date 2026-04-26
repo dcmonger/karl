@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, Text, create_engine, select
+from sqlalchemy import Column, Float, Integer, String, Text, create_engine, select
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_PATH = os.getenv("DB_PATH", "kitchen_agent/storage/kitchen.db")
@@ -32,7 +32,8 @@ class Inventory(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, nullable=False, default="default", index=True)
     item_name = Column(String, nullable=False)
-    quantity = Column(String, nullable=False)
+    quantity_numeric = Column(Float, nullable=True)
+    quantity_desc = Column(Text, nullable=True)
     unit = Column(String, nullable=True)
     location = Column(String, nullable=False)
     category = Column(String, nullable=True)
@@ -72,15 +73,6 @@ class Reminder(Base):
     created_at = Column(String, default=lambda: datetime.now().isoformat())
 
 
-class AgentMemory(Base):
-    __tablename__ = "agent_memory"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    key = Column(String, unique=True, nullable=False, index=True)
-    value = Column(Text, nullable=False)
-    updated_at = Column(String, default=lambda: datetime.now().isoformat())
-
-
 _engine = None
 _SessionLocal = None
 
@@ -113,15 +105,36 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 
+def _parse_quantity_fields(quantity: str | None) -> tuple[float | None, str | None]:
+    if quantity is None:
+        return None, None
+    normalized = str(quantity).strip()
+    if not normalized:
+        return None, None
+    try:
+        return float(normalized), None
+    except ValueError:
+        return None, normalized
+
+
+def _format_quantity(quantity_numeric: float | None, quantity_desc: str | None) -> str:
+    if quantity_numeric is not None:
+        return str(int(quantity_numeric)) if float(quantity_numeric).is_integer() else str(quantity_numeric)
+    if quantity_desc:
+        return quantity_desc
+    return "unknown"
+
+
 class InventoryDB:
     def __init__(self, user_id: str = "default"):
         init_db()
         self.user_id = user_id
 
-    def add_item(self, name: str, quantity: str, unit: str = None, location: str = "pantry",
+    def add_item(self, name: str, quantity: str = None, unit: str = None, location: str = "pantry",
                  category: str = None, expiry_days: int = None, metadata: dict = None):
         acquired = datetime.now().isoformat()
         expiry = (datetime.now() + timedelta(days=expiry_days)).isoformat() if expiry_days else None
+        quantity_numeric, quantity_desc = _parse_quantity_fields(quantity)
         with get_session() as s:
             row = s.execute(
                 select(Inventory).where(Inventory.user_id == self.user_id, Inventory.item_name == name)
@@ -129,7 +142,8 @@ class InventoryDB:
             if row is None:
                 row = Inventory(user_id=self.user_id, item_name=name, location=location, acquired_date=acquired)
                 s.add(row)
-            row.quantity = str(quantity)
+            row.quantity_numeric = quantity_numeric
+            row.quantity_desc = quantity_desc
             row.unit = unit
             row.location = location
             row.category = category
@@ -142,7 +156,7 @@ class InventoryDB:
             row = s.execute(
                 select(Inventory).where(Inventory.user_id == self.user_id, Inventory.item_name == name)
             ).scalar_one_or_none()
-            return _to_dict(row)
+            return _to_inventory_dict(row)
 
     def get_all_items(self, location: str = None) -> list:
         with get_session() as s:
@@ -150,16 +164,18 @@ class InventoryDB:
             if location:
                 stmt = stmt.where(Inventory.location == location)
             rows = s.execute(stmt).scalars().all()
-            return [_to_dict(r) for r in rows]
+            return [_to_inventory_dict(r) for r in rows]
 
     def update_quantity(self, name: str, quantity: str):
+        quantity_numeric, quantity_desc = _parse_quantity_fields(quantity)
         with get_session() as s:
             row = s.execute(
                 select(Inventory).where(Inventory.user_id == self.user_id, Inventory.item_name == name)
             ).scalar_one_or_none()
             if row is None:
                 return False
-            row.quantity = str(quantity)
+            row.quantity_numeric = quantity_numeric
+            row.quantity_desc = quantity_desc
             return True
 
     def delete_item(self, name: str):
@@ -180,7 +196,7 @@ class InventoryDB:
                     Inventory.expiry_date <= threshold,
                 ).order_by(Inventory.expiry_date)
             ).scalars().all()
-            return [_to_dict(r) for r in rows]
+            return [_to_inventory_dict(r) for r in rows]
 
 
 class ShoppingListDB:
@@ -303,26 +319,6 @@ class ReminderDB:
                 s.delete(row)
 
 
-class ConversationDB:
-    def __init__(self):
-        init_db()
-
-    def set(self, key: str, value: dict):
-        with get_session() as s:
-            row = s.execute(select(AgentMemory).where(AgentMemory.key == key)).scalar_one_or_none()
-            if row is None:
-                row = AgentMemory(key=key, value=json.dumps(value), updated_at=datetime.now().isoformat())
-                s.add(row)
-            else:
-                row.value = json.dumps(value)
-                row.updated_at = datetime.now().isoformat()
-
-    def get(self, key: str) -> Optional[dict]:
-        with get_session() as s:
-            row = s.execute(select(AgentMemory).where(AgentMemory.key == key)).scalar_one_or_none()
-            return json.loads(row.value) if row else None
-
-
 def _to_dict(row):
     if row is None:
         return None
@@ -332,4 +328,15 @@ def _to_dict(row):
             data[col.name] = getattr(row, "metadata_json")
         else:
             data[col.name] = getattr(row, col.name)
+    return data
+
+
+def _to_inventory_dict(row):
+    data = _to_dict(row)
+    if data is None:
+        return None
+    data["quantity"] = _format_quantity(
+        data.get("quantity_numeric"),
+        data.get("quantity_desc"),
+    )
     return data
