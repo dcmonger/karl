@@ -24,6 +24,13 @@ def _get_llm_instance():
     return _llm
 
 
+def _display_quantity(item: dict) -> str:
+    quantity_numeric = item.get("quantity_numeric")
+    if quantity_numeric is not None:
+        return str(int(quantity_numeric)) if float(quantity_numeric).is_integer() else str(quantity_numeric)
+    return item.get("quantity_desc") or item.get("quantity") or "unknown"
+
+
 SYSTEM_INSTRUCTION = """You are a friendly, practical kitchen assistant. You help users figure out what to cook with what they have, suggest new dishes, and inspire them to eat well. Be concise, enthusiastic, and practical. When suggesting recipes, include rough prep time, cook time, and key ingredients. If inventory is limited, suggest simple flexible recipes. If you recommend a recipe that needs marinating or advance prep, mention it. You know the user's preferences and inventory — respect their likes, dislikes, and dietary needs. Never suggest a recipe that uses ingredients they dislike or are allergic to. Keep responses conversational but informative."""
 
 
@@ -53,7 +60,7 @@ def search_recipes(
     profile = get_profile(user_id)
     inv_items = profile.retrieve_inventory()
     inv_lines = "\n".join([
-        f"- {i['item_name']}: {i['quantity']} {i.get('unit', '')} [{i['location']}]"
+        f"- {i['item_name']}: {_display_quantity(i)} {i.get('unit', '')} [{i['location']}]"
         for i in inv_items
     ]) if inv_items else "(empty)"
 

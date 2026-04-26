@@ -10,6 +10,15 @@ def _to_float(value: str) -> float | None:
         return None
 
 
+def _display_quantity(item: dict) -> str:
+    quantity_numeric = item.get("quantity_numeric")
+    if quantity_numeric is not None:
+        return str(int(quantity_numeric)) if float(quantity_numeric).is_integer() else str(quantity_numeric)
+    if item.get("quantity_desc"):
+        return item["quantity_desc"]
+    return item.get("quantity", "unknown")
+
+
 @tool
 def manage_inventory(
     action: str,
@@ -72,7 +81,7 @@ def manage_inventory(
                     acquired = f" (have had {days_owned} days)"
             unit_str = f" {item['unit']}" if item.get("unit") else ""
             lines.append(
-                f"• {item['item_name']}: {item['quantity']}{unit_str} "
+                f"• {item['item_name']}: {_display_quantity(item)}{unit_str} "
                 f"[{item['location']}]{expiry_str}{acquired}"
             )
         loc_label = f" in {location}" if location else ""
@@ -108,7 +117,7 @@ def manage_inventory(
             elif days_left <= 3:
                 expiry_str = f" — expires in {days_left} day(s)"
         return (
-            f"{item['item_name']}: {item['quantity']}{unit_str}{location_str}{expiry_str}"
+            f"{item['item_name']}: {_display_quantity(item)}{unit_str}{location_str}{expiry_str}"
         )
 
     elif action == "consume":
@@ -119,12 +128,12 @@ def manage_inventory(
             profile.remove_inventory_item(item_name)
             return f"Used up {item_name}, removed from inventory."
 
-        current_qty = _to_float(existing.get("quantity"))
+        current_qty = existing.get("quantity_numeric")
         consume_qty = _to_float(quantity)
         if current_qty is None or consume_qty is None:
             return (
                 f"Couldn't consume '{item_name}' by amount because quantity is non-numeric "
-                f"(current='{existing.get('quantity')}', requested='{quantity}'). "
+                f"(current='{_display_quantity(existing)}', requested='{quantity}'). "
                 "Use consume with no quantity to remove, or set an explicit quantity via add."
             )
 

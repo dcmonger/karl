@@ -1,7 +1,5 @@
 """Kitchen Agent profile — user-specific storage access."""
-from datetime import datetime
 from kitchen_agent.memory.relational_store import (
-    ConversationDB,
     InventoryDB,
     ShoppingListDB,
     ReminderDB,
@@ -17,43 +15,8 @@ class Profile:
         self._inv_db = InventoryDB(user_id=user_id)
         self._shop_db = ShoppingListDB(user_id=user_id)
         self._remind_db = ReminderDB(user_id=user_id)
-        self._conv_db = ConversationDB()
         self._pref_store = PreferenceStore()
         self._recipe_store = RecipeHistoryStore()
-
-    # Conversation tracking
-    def _conversation_key(self) -> str:
-        return f"conversation_history:{self.user_id}"
-
-    def append_message(self, role: str, content: str) -> None:
-        """Add to full conversation history."""
-        key = self._conversation_key()
-        raw = self._conv_db.get(key) or {"messages": []}
-        messages = raw.get("messages", [])
-        messages.append({
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now().isoformat(),
-        })
-        if len(messages) > 200:
-            messages = messages[-200:]
-        self._conv_db.set(key, {"messages": messages})
-
-    def get_conversation_history(self, limit: int = 8, max_chars: int = 30000) -> list:
-        """Get conversation history with size limits."""
-        key = self._conversation_key()
-        raw = self._conv_db.get(key) or {"messages": []}
-        messages = raw.get("messages", [])[-limit:]
-        bounded = []
-        total_chars = 0
-        for msg in reversed(messages):
-            content = (msg.get("content") or "")[:1000]
-            msg_len = len(content)
-            if total_chars + msg_len > max_chars:
-                break
-            bounded.append({"role": msg.get("role"), "content": content})
-            total_chars += msg_len
-        return list(reversed(bounded))
 
     # Inventory
     def retrieve_inventory(self, location: str = None) -> list:

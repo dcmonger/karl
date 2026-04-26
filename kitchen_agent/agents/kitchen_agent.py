@@ -2,16 +2,37 @@
 import os
 import sys
 import asyncio
+from contextlib import ExitStack
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import Runnable
 from langchain.agents import create_agent
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from kitchen_agent.tools import TOOLS
 from kitchen_agent.memory import get_profile
-from kitchen_agent.config.settings import LLM_PROVIDER, MODEL_NAME, GEMINI_KEY
+from kitchen_agent.config.settings import (
+    LLM_PROVIDER,
+    MODEL_NAME,
+    GEMINI_KEY,
+    LANGGRAPH_CHECKPOINT_DB_PATH,
+)
+
+_exit_stack = ExitStack()
+_checkpointer: SqliteSaver | None = None
+
+
+def _get_checkpointer() -> SqliteSaver:
+    global _checkpointer
+    if _checkpointer is None:
+        parent_dir = os.path.dirname(LANGGRAPH_CHECKPOINT_DB_PATH)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+        _checkpointer = _exit_stack.enter_context(
+            SqliteSaver.from_conn_string(LANGGRAPH_CHECKPOINT_DB_PATH)
+        )
+    return _checkpointer
 
 
 def _get_llm() -> Runnable:
@@ -99,6 +120,7 @@ class KitchenAgent:
             model=self.llm,
             tools=agent_tools,
             system_prompt=_build_system_prompt(user_id),
+            checkpointer=_get_checkpointer(),
         )
     
     def run(self, user_message: str, user_id: str = None) -> str:
@@ -108,22 +130,12 @@ class KitchenAgent:
     async def run_async(self, user_message: str, user_id: str = None) -> str:
         """Run the agent asynchronously using ainvoke."""
         uid = user_id or self.user_id
-        profile = get_profile(uid)
-
-        prior_messages = []
-        for msg in profile.get_conversation_history(limit=8, max_chars=3000):
-            if msg.get("role") == "user":
-                prior_messages.append(HumanMessage(content=msg.get("content", "")))
-            elif msg.get("role") == "assistant":
-                prior_messages.append(AIMessage(content=msg.get("content", "")))
 
         result = await self.graph.ainvoke(
-            {"messages": [*prior_messages, HumanMessage(content=user_message)]},
+            {"messages": [{"role": "user", "content": user_message}]},
+            config={"configurable": {"thread_id": uid}},
         )
 
         last_msg = result["messages"][-1]
         response = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
-
-        profile.append_message("user", user_message)
-        profile.append_message("assistant", response)
         return response
