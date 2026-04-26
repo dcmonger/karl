@@ -4,6 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GEMINI_KEY = os.getenv("GEMINI_KEY", "")
 
@@ -19,6 +27,7 @@ LANGGRAPH_CHECKPOINT_DB_PATH = os.getenv(
 CHROMA_PATH = os.getenv("CHROMA_PATH", "kitchen_agent/storage/chroma")
 AGENT_BASE_URL = os.getenv("AGENT_BASE_URL", "http://localhost:8000")
 REMINDER_DAEMON_URL = os.getenv("REMINDER_DAEMON_URL", "http://localhost:8001")
+ENABLE_TOOLING_ESCALATION_MESSAGES = _env_bool("ENABLE_TOOLING_ESCALATION_MESSAGES", True)
 
 
 def validate_runtime_env(service: str = "agent") -> None:
