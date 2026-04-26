@@ -5,7 +5,7 @@ Karl is a FastAPI-based kitchen assistant that can:
 - Chat with users via Telegram (polling or webhook mode).
 - Track kitchen inventory and shopping list data.
 - Run reminder scheduling through a companion reminder daemon.
-- Persist local state in SQLite and Chroma-backed storage, including restart-safe, bounded conversation history.
+- Persist local state in SQLite and Chroma-backed storage for inventory, shopping, reminders, and user preferences.
 
 ## Project structure
 
@@ -193,9 +193,6 @@ Set required secrets (at minimum `GEMINI_KEY` and `TELEGRAM_TOKEN`) in your Rail
 ## Agent inventory write tools
 
 The agent now has explicit write tools for inventory changes:
-
-Conversation replay uses a bounded window (message count + character cap) so prompts stay efficient as history grows.
-
 
 - `manage_inventory(action="add", ...)` for restocks/additions (e.g. “I bought eggs”).
 - `manage_inventory(action="consume", ...)` for consumption/use-up actions (e.g. “I used the last garlic”).

@@ -43,6 +43,7 @@ AUTHORIZED_TELEGRAM_USER_IDS=123456789  # optional allowlist
 - `kitchen_agent/messenger.py` — FastAPI server + Telegram polling/webhook
 - `kitchen_agent/api/routes.py` — API routes for chat, inventory, shopping, memory
 - `kitchen_agent/agents/kitchen_agent.py` — LangGraph agent definition
+- `kitchen_agent/memory/profile.py` — profile wrapper for inventory, shopping, reminders, preferences, and recipe history (does not persist conversation transcript)
 - `kitchen_agent/tools/` — LangGraph tools (9 total):
   - Read: `check_inventory`, `get_item_quantity`, `search_recipes`
   - Write: `update_inventory`, `consume_inventory`, `add_to_shopping_list`
