@@ -1,4 +1,6 @@
 """Kitchen Agent profile — user-specific storage access."""
+from datetime import datetime
+
 from kitchen_agent.memory.relational_store import (
     InventoryDB,
     ShoppingListDB,

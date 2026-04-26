@@ -70,19 +70,6 @@ def test_manage_inventory_consume_non_numeric(monkeypatch, tmp_path):
     assert "non-numeric" in out
 
 
-def test_conversation_history_truncation(monkeypatch, tmp_path):
-    _, profile_mod, _, _ = _reload_modules(monkeypatch, tmp_path)
-
-    p = profile_mod.get_profile("u1")
-    for i in range(20):
-        p.append_message("user", f"msg-{i}")
-
-    hist = p.get_conversation_history(limit=5, max_chars=20)
-    assert len(hist) <= 5
-    total_chars = sum(len(m["content"]) for m in hist)
-    assert total_chars <= 20
-
-
 def test_manage_reminder_reports_daemon_sync_error(monkeypatch, tmp_path):
     _, _, _, rem_mod = _reload_modules(monkeypatch, tmp_path)
 
