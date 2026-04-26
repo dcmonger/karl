@@ -124,7 +124,7 @@ async def process_update(update: dict):
     logger.info(f"Message from {sender_id}: {text[:80]}")
     
     try:
-        agent = get_agent(sender_id)
+        logger.exception(f"Error processing message: {text[:50]}")
         response = await agent.run_async(text, user_id=sender_id)
         await send_telegram_message(chat_id, response)
         logger.info(f"Response sent to {chat_id}")
