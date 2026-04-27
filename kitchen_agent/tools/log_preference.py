@@ -1,6 +1,6 @@
 """log_preference tool — stores user preferences and feedback in ChromaDB."""
+from typing import List
 from langchain_core.tools import tool
-from kitchen_agent.memory import get_profile
 
 
 @tool
@@ -49,7 +49,7 @@ def log_recipe_feedback(
     recipe_name: str,
     feedback: str = None,
     rating: int = None,
-    ingredients_used: list = None,
+    ingredients_used: list[str] = None,
     user_id: str = "default",
 ) -> str:
     """Log that you cooked a recipe and your feedback on it.

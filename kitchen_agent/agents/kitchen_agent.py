@@ -41,8 +41,9 @@ async def _get_checkpointer() -> AsyncSqliteSaver:
                 parent_dir = os.path.dirname(LANGGRAPH_CHECKPOINT_DB_PATH)
                 if parent_dir:
                     os.makedirs(parent_dir, exist_ok=True)
-                checkpointer_cm = AsyncSqliteSaver.from_conn_string(LANGGRAPH_CHECKPOINT_DB_PATH)
-                _checkpointer = await checkpointer_cm.__aenter__()
+                import aiosqlite
+                conn = await aiosqlite.connect(LANGGRAPH_CHECKPOINT_DB_PATH)
+                _checkpointer = AsyncSqliteSaver(conn)
     return _checkpointer
 
 
@@ -141,7 +142,6 @@ class KitchenAgent:
             )
         ]
         
-        agent_tools = [*self.tools]
 
     async def _ensure_graph(self):
         if not self._graph_initialized:
@@ -149,7 +149,7 @@ class KitchenAgent:
                 self._checkpointer = await _get_checkpointer()
             self.graph = create_agent(
                 model=self.llm,
-                tools=agent_tools,
+                tools=[*self.tools],
                 system_prompt=_build_system_prompt(self.user_id),
                 middleware=self.middleware,
                 checkpointer=self._checkpointer,

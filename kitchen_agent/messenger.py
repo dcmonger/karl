@@ -39,17 +39,29 @@ def _get_client() -> httpx.AsyncClient:
     return _telegram_client
 
 
-async def send_telegram_message(chat_id: str, text: str, parse_mode: str = "Markdown") -> dict:
+async def send_telegram_message(chat_id: str, text: str, parse_mode: str = None) -> dict:
     """Send a text message to a Telegram user."""
+    MAX_LENGTH = 4096
+    
     client = _get_client()
     url = f"{BASE_URL}/sendMessage"
+    
+    if len(text) > MAX_LENGTH:
+        text = text[:MAX_LENGTH - 50].rsplit("\n### ", 1)[0] + "\n\n_(response truncated)_"
+    
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": parse_mode,
     }
-    response = await client.post(url, json=payload)
-    response.raise_for_status()
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    try:
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+    except Exception as e:
+        logger.error(f"Failed to send to {chat_id}: {text[:200]}... payload: {payload}")
+        raise
+    return response.json()
     return response.json()
 
 
@@ -124,12 +136,13 @@ async def process_update(update: dict):
     logger.info(f"Message from {sender_id}: {text[:80]}")
     
     try:
-        logger.exception(f"Error processing message: {text[:50]}")
+        agent = get_agent(sender_id)
+        logger.info(f"Running agent for: {sender_id}")
         response = await agent.run_async(text, user_id=sender_id)
         await send_telegram_message(chat_id, response)
         logger.info(f"Response sent to {chat_id}")
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
+        logger.exception(f"Error processing message: {e}")
         await send_telegram_message(chat_id, f"Sorry, I ran into an issue: {e}")
 
 
